@@ -30,7 +30,6 @@ class PlayerRating(db.Model):
 # Page
 @app.route("/", methods = ["GET", "POST"])
 def index():
-    # Add user
     formats = []
     current_username = None
     error_message = None
@@ -99,6 +98,7 @@ def index():
             db.session.add(player)
         db.session.commit()
 
+        #querying all formats from user
         formats = (
             db.session.query(PlayerRating.format).filter(PlayerRating.userid == 
                                                             current_username).distinct().all()

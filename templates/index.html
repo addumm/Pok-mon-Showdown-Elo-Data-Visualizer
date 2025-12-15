@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="{{url_for("static", filename = "styles.css")}}" />
+    <title>PS! Elo Trends</title>
+</head>
+<body>
+    <div class = "content">
+        <h1>Pokemon Showdown Elo Visualization</h1>
+    </div>
+
+    <div>
+    <form method = "POST" action = "">
+        <input type = "text" name = "username" placeholder="Username" id = "username"/>
+        <input type = "submit" value = "submit" id = "btn_add">
+
+        {% if formats %}
+        <select name="format" id="format">
+          {% for fmt in formats %}
+            <option value="{{ fmt }}">{{ fmt }}</option>
+          {% endfor %}
+        </select>
+
+        {% else %}
+            <select name = "format" id = "format">
+                <option value = "">Format</option>
+            </select>
+        {% endif %}
+    </form>
+    </div>
+
+<hr>
+    {% if current_username %}
+    <p>{{ current_username }}</p>
+    {% endif %}
+
+    {% if error_message %}
+        <p> {{ error_message }} </p>
+    {% endif %}
+
+
+</body>
+</html>

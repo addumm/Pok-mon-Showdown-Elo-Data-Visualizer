@@ -38,17 +38,19 @@ def fetch_current_ratings(username: str) -> pd.DataFrame:
     user_dict = json.loads(r.text)
 
     if not user_dict["ratings"]:
-        df = pd.read_json(StringIO(r.text))
-        df["format"] = pd.NA
-        df["elo"] = 1000
-        df["gxe"] = 0
-        df["w"] = 0
-        df["l"] = 0
-        df.drop(["ratings", "registertime", "group"], axis = 1, inplace = True)
-        df = df[["userid", "username", "format", "elo", "gxe", "w", "l"]]
-        df["timestamp"] = pd.Timestamp.now()
+        df = pd.DataFrame(
+            {
+                "userid": [user_dict["userid"]],
+                "username": [user_dict["username"]],
+                "format": [None],
+                "elo": [1000],
+                "gxe": [0],
+                "w": [0],
+                "l": [0],
+                "timestamp": [pd.Timestamp.now()]
+            }
+        )
         return df
-
 
     df_ratings = pd.DataFrame(user_dict["ratings"]).T
     df_ratings = df_ratings.reset_index().rename(columns = {"index": "format"})

@@ -36,7 +36,7 @@ def index():
 
     if request.method == "POST":
         # parse usernames to alphanumeric
-        current_username = request.form["username"].strip().lower()
+        current_username = request.form["username"].strip().lower().replace(" ", "")
         current_username = re.sub(r'[^a-zA-Z0-9]', '', current_username)
 
         # handle no input

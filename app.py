@@ -17,7 +17,7 @@ class PlayerRating(db.Model):
     id = db.Column(db.Integer, primary_key = True, autoincrement = True)
     userid = db.Column(db.String(18), nullable = False)
     username = db.Column(db.String(18), nullable = False)
-    format = db.Column(db.String, nullable = False)
+    format = db.Column(db.String)
     elo = db.Column(db.Float, nullable = False)
     gxe = db.Column(db.Float)
     wins = db.Column(db.Integer)
@@ -48,11 +48,7 @@ def index():
                                    )
 
         # CHECK IF USER IS ALREADY IN DB
-        user_has_rows = (
-        PlayerRating.query.filter_by(userid=current_username).first() is not None
-        )
-
-        if user_has_rows:
+        elif (PlayerRating.query.filter_by(userid=current_username).first() is not None):
             formats = (
             db.session.query(PlayerRating.format).filter(PlayerRating.userid == 
                                                             current_username).distinct().all()
@@ -64,7 +60,7 @@ def index():
                                error_message = None
                                )            
 
-        # if user is not in DB, try to hit showdown api for inputted username
+        # else user is not in DB, try to hit showdown api for inputted username
         try:
             rating_df = fetch_current_ratings(current_username)
 

@@ -42,17 +42,26 @@ def set_dash_layout(current_username, selected_format):
 
     if plots_df.empty:
         fig = px.line(title="No data for this user/format")
+
+    elif len(plots_df) == 1:
+        fig = px.scatter(
+            plots_df,
+            x="timestamp",
+            y="elo",
+            title=f"Elo Over Time for {selected_format}",
+        )
+
     else:
         fig = px.line(
             plots_df,
             x="timestamp",
             y="elo",
-            title=f"{current_username} Elo Over Time for {selected_format}",
+            title=f"Elo Over Time for {selected_format}",
         )
 
     dash_app.layout = html.Div(
         [
-            html.H2("Elo chart"),
+            html.H2(f"{current_username} Profile"),
             dcc.Graph(id="elo-graph", figure=fig),
         ]
     )
@@ -129,6 +138,7 @@ def index():
         if not selected_format and formats:
             selected_format = formats[0]
 
+        #visualizations done via dash
         if selected_format:
             set_dash_layout(current_username, selected_format)
 

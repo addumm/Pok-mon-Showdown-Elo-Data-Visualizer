@@ -16,6 +16,7 @@
         <input type = "text" name = "username" placeholder="Username" id = "username" value = "{{ current_username or ''}}"/>
         {% if formats %}
         <select name="format" id="format">
+            <option value="" {% if not selected_format %}selected{% endif %}>-- Select format --</option>
           {% for fmt in formats %}
             <option value="{{ fmt }}">{{ fmt }}</option>
           {% endfor %}

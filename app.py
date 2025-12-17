@@ -1,22 +1,19 @@
-from flask import Flask, render_template, redirect, request
+from flask import Flask, render_template, request
 from flask_scss import Scss
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import select
-from datetime import datetime
 from showdown_client import fetch_current_ratings, ShowdownUnavailableError, ShowdownUserError
 import pandas as pd
 import re
-import json
-from elo_visualization import df_for_plots
 import plotly.express as px
-from plotly.utils import PlotlyJSONEncoder
 from dash import Dash, html, dcc
+from models import db, PlayerRating
 
 app = Flask(__name__)
 Scss(app)
 
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///elo.db"
-db = SQLAlchemy(app)
+db.init_app(app)
 
 # embedded dash app in flask
 dash_app = Dash(
@@ -24,21 +21,6 @@ dash_app = Dash(
     server=app,
     url_base_pathname="/elo/"
     )
-
-# Data Class
-class PlayerRating(db.Model):
-    id = db.Column(db.Integer, primary_key = True, autoincrement = True)
-    userid = db.Column(db.String(18), nullable = False)
-    username = db.Column(db.String(18), nullable = False)
-    format = db.Column(db.String)
-    elo = db.Column(db.Float, nullable = False)
-    gxe = db.Column(db.Float)
-    wins = db.Column(db.Integer)
-    losses = db.Column(db.Integer)
-    timestamp = db.Column(db.DateTime, default = datetime.now)
-
-    def __repr__(self) -> str:
-        return f"player {self.id}"
 
 # dash helper for plotly plots
 def set_dash_layout(current_username, selected_format):
@@ -155,6 +137,7 @@ def index():
             current_username = current_username,
             formats=formats,
             error_message = None,
+            selected_format=selected_format
         )
 
     else:

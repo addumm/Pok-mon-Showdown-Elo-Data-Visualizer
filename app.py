@@ -5,6 +5,10 @@ from datetime import datetime
 from showdown_client import fetch_current_ratings, ShowdownUnavailableError, ShowdownUserError
 import pandas as pd
 import re
+import json
+from elo_visualization import df_for_plots
+import plotly.express as px
+from plotly.utils import PlotlyJSONEncoder
 
 app = Flask(__name__)
 Scss(app)
@@ -33,11 +37,13 @@ def index():
     formats = []
     current_username = None
     error_message = None
+    graph_JSON = None
 
     if request.method == "POST":
         # parse usernames to alphanumeric
         current_username = request.form["username"].strip().lower().replace(" ", "")
         current_username = re.sub(r'[^a-zA-Z0-9]', '', current_username)
+        selected_format = request.form.get("format")
 
         # handle no input
         if current_username == "":
@@ -54,6 +60,8 @@ def index():
                                                             current_username).distinct().all()
                                                             )
             formats = [f[0] for f in formats]
+
+
             return render_template("index.html", 
                                current_username = current_username, 
                                formats = formats,

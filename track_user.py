@@ -58,7 +58,7 @@ def grab_new():
         db.session.commit()
 
 
-schedule.every(3).minutes.do(grab_new)
+schedule.every(2).minutes.do(grab_new)
 
 
 while True:

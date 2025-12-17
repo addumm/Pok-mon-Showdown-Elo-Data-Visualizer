@@ -9,8 +9,11 @@ idna==3.11
 itsdangerous==2.2.0
 Jinja2==3.1.6
 MarkupSafe==3.0.3
+narwhals==2.14.0
 numpy==2.2.6
+packaging==25.0
 pandas==2.3.3
+plotly==6.5.0
 pyScss==1.4.0
 python-dateutil==2.9.0.post0
 pytz==2025.2

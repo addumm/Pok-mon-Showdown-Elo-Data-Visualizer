@@ -10,12 +10,20 @@ import json
 from elo_visualization import df_for_plots
 import plotly.express as px
 from plotly.utils import PlotlyJSONEncoder
+from dash import Dash, html, dcc
 
 app = Flask(__name__)
 Scss(app)
 
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///elo.db"
 db = SQLAlchemy(app)
+
+# embedded dash app in flask
+dash_app = Dash(
+    __name__,
+    server=app,
+    url_base_pathname="/elo/"
+    )
 
 # Data Class
 class PlayerRating(db.Model):
@@ -32,13 +40,48 @@ class PlayerRating(db.Model):
     def __repr__(self) -> str:
         return f"player {self.id}"
 
+# dash helper for plotly plots
+def set_dash_layout(current_username, selected_format):
+    stmt = (
+        select(
+            PlayerRating.userid,
+            PlayerRating.format,
+            PlayerRating.elo,
+            PlayerRating.timestamp,
+        )
+        .where(
+            PlayerRating.userid == current_username,
+            PlayerRating.format == selected_format,
+        )
+        .order_by(PlayerRating.timestamp)
+    )
+
+    plots_df = pd.read_sql(stmt, db.engine)
+
+    if plots_df.empty:
+        fig = px.line(title="No data for this user/format")
+    else:
+        fig = px.line(
+            plots_df,
+            x="timestamp",
+            y="elo",
+            title=f"{current_username} Elo Over Time for {selected_format}",
+        )
+
+    dash_app.layout = html.Div(
+        [
+            html.H2("Elo chart"),
+            dcc.Graph(id="elo-graph", figure=fig),
+        ]
+    )
+dash_app.layout = html.Div([html.H2("No chart yet. Go to / and submit a user.")])
+
 # Page
 @app.route("/", methods = ["GET", "POST"])
 def index():
     formats = []
     current_username = None
     error_message = None
-    graph_JSON = None
 
     if request.method == "POST":
         # parse usernames to alphanumeric
@@ -52,8 +95,7 @@ def index():
             return render_template("index.html",
                                    current_username = current_username,
                                    formats = formats,
-                                   error_message = "",
-                                   graph_JSON = None
+                                   error_message = ""
                                    )
 
         user_exists = (PlayerRating.query.filter_by(userid=current_username).first() is not None)
@@ -67,8 +109,8 @@ def index():
                 return render_template("index.html",
                                     current_username = None,
                                     formats = formats,
-                                    error_message=error_message,
-                                    graph_JSON = None)
+                                    error_message=error_message
+                                    )
 
             except ShowdownUnavailableError:
                 error_message = "Showdown is temporarily unavailable. Please try again later."
@@ -76,8 +118,8 @@ def index():
                 return render_template("index.html", 
                                     current_username = None, 
                                     formats = formats,
-                                    error_message = error_message,
-                                    graph_JSON = None)
+                                    error_message = error_message
+                                    )
 
         # add player & stats to db
             for _, row in rating_df.iterrows():
@@ -98,7 +140,7 @@ def index():
         formats = (
             db.session.query(PlayerRating.format).filter(PlayerRating.userid == 
                                                             current_username).distinct().all()
-        )
+                                                            )
         formats = [f[0] for f in formats]
 
         # choose first format if nothing is selected
@@ -106,40 +148,13 @@ def index():
             selected_format = formats[0]
 
         if selected_format:
-            stmt = select(
-                PlayerRating.userid,
-                PlayerRating.format,
-                PlayerRating.elo,
-                PlayerRating.timestamp,).where(
-                PlayerRating.userid == current_username,
-                PlayerRating.format == selected_format).order_by(
-                    PlayerRating.timestamp)
-            
-            plots_df = pd.read_sql(stmt, db.engine)
-            plots_df["elo"] = pd.to_numeric(plots_df["elo"], errors="coerce")
-            min_elo = plots_df["elo"].min()
-            max_elo = plots_df["elo"].max()
-
-            #TODO fix y axis/figure out why plotly is plotting elo as the row indices 0 to 11, not the elo values
-            if not plots_df.empty:
-                fig = px.line(plots_df, x = "timestamp", y = "elo", 
-                              title = f"Elo Over Time for {selected_format}")
-                fig.update_yaxes(
-                    title_text="Elo",
-                    range=[min_elo - 10, max_elo + 10],
-                    type="linear",
-                    tick0=round(min_elo / 50) * 50,
-                    dtick=50,
-    )
-                
-                graph_JSON = json.dumps(fig, cls=PlotlyJSONEncoder)
+            set_dash_layout(current_username, selected_format)
 
         return render_template(
             "index.html",
             current_username = current_username,
             formats=formats,
             error_message = None,
-            graph_JSON = graph_JSON
         )
 
     else:

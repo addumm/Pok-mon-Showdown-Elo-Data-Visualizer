@@ -31,23 +31,17 @@
     </div>
 
 <hr>
-    {% if current_username %}
-    <p>{{ current_username }}</p>
-    {% endif %}
-
     {% if error_message %}
         <p> {{ error_message }} </p>
     {% endif %}
 
-    {% if graph_JSON %}
-        <div id = "elo-chart"></div>
-        <script src = "https://cdn.plot.ly/plotly-latest.min.js"></script>
-        <script>
-            const fig = {{ graph_JSON|safe }};
-            Plotly.newPlot("elo-chart", fig.data, fig.layout);
-        </script>
-    {% endif %}
-
+    {% if current_username and formats %}
+    <iframe
+        src="/elo/"
+        style="width: 100%; height: 500px; border: none;">
+    </iframe>
+  {% endif %}
+  
 
 </body>
 </html>

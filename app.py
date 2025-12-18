@@ -8,6 +8,7 @@ import re
 import plotly.express as px
 from dash import Dash, html, dcc
 from models import db, PlayerRating
+import plotly.graph_objects as go
 
 app = Flask(__name__)
 Scss(app)
@@ -46,6 +47,14 @@ def set_dash_layout(current_username, selected_format):
     plots_df["elo"] = round(plots_df["elo"])
     plots_df["timestamp"] = plots_df["timestamp"].dt.strftime("%B %d %Y %I:%M %p")
 
+    #for pie chart win-loss
+    row = plots_df.tail(1)
+    plot_data = pd.DataFrame({
+    'Result': ['Wins', 'Losses'],
+    'Games': [row['wins'], row['losses']]
+    })
+    colors = ["#4CAF50", "#E84057"]
+
     if plots_df.empty:
         fig = px.line(title="No data for this user/format")
 
@@ -75,6 +84,9 @@ def set_dash_layout(current_username, selected_format):
             yaxis_title = "Elo"
         )
         fig.update_xaxes(showticklabels = False)
+
+        ############ W/L PIE CHART HELL #############
+
 
     dash_app.layout = html.Div(
         [

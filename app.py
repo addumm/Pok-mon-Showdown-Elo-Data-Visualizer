@@ -32,6 +32,7 @@ def set_dash_layout(current_username, selected_format):
             PlayerRating.userid,
             PlayerRating.format,
             PlayerRating.elo,
+            PlayerRating.gxe,
             PlayerRating.timestamp,
             PlayerRating.wins,
             PlayerRating.losses
@@ -47,7 +48,7 @@ def set_dash_layout(current_username, selected_format):
     plots_df["elo"] = round(plots_df["elo"])
     plots_df["timestamp"] = plots_df["timestamp"].dt.strftime("%B %d %Y %I:%M %p")
 
-    #for pie chart win-loss
+    #### for pie chart win-loss ####
     row = plots_df.tail(1)
     plot_data = pd.DataFrame({
     'Result': ['Wins', 'Losses'],
@@ -105,7 +106,6 @@ def index():
 
     if request.method == "POST":
         # parse usernames to alphanumeric
-        raw_username = request.form["username"]
         current_username = request.form["username"].strip().lower().replace(" ", "")
         current_username = re.sub(r'[^a-zA-Z0-9]', '', current_username)
         selected_format = request.form.get("format")

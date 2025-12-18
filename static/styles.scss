@@ -1,3 +1,32 @@
 body{
-    background-color: white;
+    background-color: #2F2F2F;
+    font-family: "Open Sans", verdana, arial, sans-serif;
+}
+
+#btn_add{
+    background-color: #5E68D0;
+    height: 39px;
+    color: white;
+    padding: 10px 10px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: "Open Sans", verdana, arial, sans-serif;
+}
+
+#format{
+    background-color: #5E68D0;
+    color: white;
+    padding: 10px 10px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: "Open Sans", verdana, arial, sans-serif;
+}
+
+#username{
+    padding: 10px 10px;
+    border: none;
+    border-radius: 4px;
+    font-family: "Open Sans", verdana, arial, sans-serif;
 }

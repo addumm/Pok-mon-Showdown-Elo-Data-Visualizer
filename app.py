@@ -22,7 +22,9 @@ dash_app = Dash(
     url_base_pathname="/elo/"
     )
 
-# dash helper for plotly plots
+dash_app.layout = html.Div([html.H2("Select a valid format")])
+
+# dash helper app for plotly plots
 def set_dash_layout(current_username, selected_format):
     stmt = (
         select(
@@ -30,6 +32,8 @@ def set_dash_layout(current_username, selected_format):
             PlayerRating.format,
             PlayerRating.elo,
             PlayerRating.timestamp,
+            PlayerRating.wins,
+            PlayerRating.losses
         )
         .where(
             PlayerRating.userid == current_username,
@@ -37,8 +41,10 @@ def set_dash_layout(current_username, selected_format):
         )
         .order_by(PlayerRating.timestamp)
     )
-
+    #query into df for plotly (use AM/PM times asw)
     plots_df = pd.read_sql(stmt, db.engine)
+    plots_df["elo"] = round(plots_df["elo"])
+    plots_df["timestamp"] = plots_df["timestamp"].dt.strftime("%B %d %Y %I:%M %p")
 
     if plots_df.empty:
         fig = px.line(title="No data for this user/format")
@@ -49,7 +55,9 @@ def set_dash_layout(current_username, selected_format):
             x="timestamp",
             y="elo",
             title=f"Elo Over Time for {selected_format}",
-        )
+            template = "plotly_dark"
+            )
+        fig.update_xaxes(showticklabels = False)
 
     else:
         fig = px.line(
@@ -57,15 +65,24 @@ def set_dash_layout(current_username, selected_format):
             x="timestamp",
             y="elo",
             title=f"Elo Over Time for {selected_format}",
+            template = "plotly_dark"
         )
+        fig.update_layout(
+            yaxis=dict(
+            dtick=100,
+            tick0= 1000),
+            xaxis_title="Timestamp",
+            yaxis_title = "Elo"
+        )
+        fig.update_xaxes(showticklabels = False)
 
     dash_app.layout = html.Div(
         [
-            html.H2(f"{current_username} Profile"),
-            dcc.Graph(id="elo-graph", figure=fig),
+            html.H2(f"{current_username} Profile", style={"fontFamily": "Open Sans, verdana arial, sans-serif",
+                                                          "color": "white"}),
+            dcc.Graph(id="elo-graph", figure=fig)
         ]
-    )
-dash_app.layout = html.Div([html.H2("No chart yet. Go to / and submit a user.")])
+        )
 
 # Page
 @app.route("/", methods = ["GET", "POST"])
@@ -154,8 +171,7 @@ def index():
         return render_template("index.html", 
                                current_username = current_username, 
                                formats = formats,
-                               error_message = None,
-                               graph_JSON = None
+                               error_message = None
                                )
 
 

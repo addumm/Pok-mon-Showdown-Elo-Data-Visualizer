@@ -7,6 +7,7 @@ import pandas as pd
 import re
 import plotly.express as px
 from dash import Dash, html, dcc
+import dash_bootstrap_components as dbc
 from models import db, PlayerRating
 import plotly.graph_objects as go
 
@@ -20,7 +21,8 @@ db.init_app(app)
 dash_app = Dash(
     __name__,
     server=app,
-    url_base_pathname="/elo/"
+    url_base_pathname="/elo/",
+    external_stylesheets=[dbc.themes.DARKLY]
     )
 
 dash_app.layout = html.Div([html.H2("Select a valid format")])
@@ -49,12 +51,11 @@ def set_dash_layout(current_username, selected_format):
     plots_df["timestamp"] = plots_df["timestamp"].dt.strftime("%B %d %Y %I:%M %p")
 
     #### for pie chart win-loss ####
-    row = plots_df.tail(1)
-    plot_data = pd.DataFrame({
-    'Result': ['Wins', 'Losses'],
-    'Games': [row['wins'], row['losses']]
-    })
-    colors = ["#4CAF50", "#E84057"]
+
+
+    ### peak elo & peak gxe
+    peak_elo = int(plots_df["elo"].max())
+    peak_gxe = plots_df["gxe"].max()
 
     if plots_df.empty:
         fig = px.line(title="No data for this user/format")
@@ -68,6 +69,39 @@ def set_dash_layout(current_username, selected_format):
             template = "plotly_dark"
             )
         fig.update_xaxes(showticklabels = False)
+
+        latest = plots_df.tail(1)
+        wins = int(latest["wins"])
+        losses = int(latest["losses"])
+        pie_df = pd.DataFrame({
+        'result': ['Wins', 'Losses'],
+        'count': [wins, losses]
+        })
+        pie_fig = px.pie(
+        pie_df,
+        values = "count",
+        names = "result",
+        color = "result",
+        color_discrete_map= {"Wins": "#4CAF50", "Losses": "#E84057"},
+        hole = 0.5,
+        template = "plotly_dark",
+        width=400, 
+        height=200
+        )
+
+        pie_fig.update_traces(
+        textposition="inside",
+        textinfo="label+percent",
+        marker=dict(line=dict(color="#111111", width=1)),
+        pull=[0, 0],
+        hoverinfo="label+value",
+        )
+
+        pie_fig.update_layout(
+        margin=dict(l=0, r=0, t=0, b=0),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",   
+        )
 
     else:
         fig = px.line(
@@ -87,15 +121,48 @@ def set_dash_layout(current_username, selected_format):
         fig.update_xaxes(showticklabels = False)
 
         ############ W/L PIE CHART HELL #############
+        latest = plots_df.tail(1)
+        wins = int(latest["wins"])
+        losses = int(latest["losses"])
+        pie_df = pd.DataFrame({
+        'result': ['Wins', 'Losses'],
+        'count': [wins, losses]
+        })
+        pie_fig = px.pie(
+        pie_df,
+        values = "count",
+        names = "result",
+        color = "result",
+        color_discrete_map= {"Wins": "#4CAF50", "Losses": "#E84057"},
+        hole = 0.5,
+        template = "plotly_dark",
+        width=400, 
+        height=200
+        )
 
+        pie_fig.update_traces(
+        textposition="inside",
+        textinfo="label+percent",
+        marker=dict(line=dict(color="#111111", width=1)),
+        pull=[0, 0],
+        hoverinfo="label+value",
+        )
+
+        pie_fig.update_layout(
+        margin=dict(l=0, r=0, t=0, b=0),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",   
+        )
 
     dash_app.layout = html.Div(
-        [
-            html.H2(f"{current_username} Profile", style={"fontFamily": "Open Sans, verdana arial, sans-serif",
-                                                          "color": "white"}),
-            dcc.Graph(id="elo-graph", figure=fig)
-        ]
-        )
+            [
+                html.H2(f"{current_username} Profile"),
+                dcc.Graph(id="elo-graph", figure=fig),
+
+                html.H5("Win/Loss ratio"),
+                dcc.Graph(id="wl-pie", figure=pie_fig),
+            ]
+    )
 
 # Page
 @app.route("/", methods = ["GET", "POST"])

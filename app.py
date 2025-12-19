@@ -51,16 +51,28 @@ def set_dash_layout(current_username, selected_format):
     plots_df["timestamp"] = plots_df["timestamp"].dt.strftime("%B %d %Y %I:%M %p")
 
     #### for pie chart win-loss ####
+    latest = plots_df.tail(1)
+    wins = int(latest["wins"])
+    losses = int(latest["losses"])
+    pie_df = pd.DataFrame({
+    'result': ['Wins', 'Losses'],
+    'count': [wins, losses]
+    })
 
 
     ### peak elo & peak gxe
     peak_elo = int(plots_df["elo"].max())
     peak_gxe = plots_df["gxe"].max()
 
+    ### Last 10 games record ###
+    
+
     if plots_df.empty:
         fig = px.line(title="No data for this user/format")
 
     elif len(plots_df) == 1:
+
+        ###### time series elo plot ######
         fig = px.scatter(
             plots_df,
             x="timestamp",
@@ -70,25 +82,17 @@ def set_dash_layout(current_username, selected_format):
             )
         fig.update_xaxes(showticklabels = False)
 
-        latest = plots_df.tail(1)
-        wins = int(latest["wins"])
-        losses = int(latest["losses"])
-        pie_df = pd.DataFrame({
-        'result': ['Wins', 'Losses'],
-        'count': [wins, losses]
-        })
+        ######## WL pie chart ########
         pie_fig = px.pie(
         pie_df,
         values = "count",
         names = "result",
         color = "result",
         color_discrete_map= {"Wins": "#4CAF50", "Losses": "#E84057"},
-        hole = 0.5,
+        hole = 0.7,
         template = "plotly_dark",
-        width=400, 
         height=200
         )
-
         pie_fig.update_traces(
         textposition="inside",
         textinfo="label+percent",
@@ -96,7 +100,6 @@ def set_dash_layout(current_username, selected_format):
         pull=[0, 0],
         hoverinfo="label+value",
         )
-
         pie_fig.update_layout(
         margin=dict(l=0, r=0, t=0, b=0),
         paper_bgcolor="rgba(0,0,0,0)",
@@ -104,6 +107,7 @@ def set_dash_layout(current_username, selected_format):
         )
 
     else:
+        ######## elo time-series ########
         fig = px.line(
             plots_df,
             x="timestamp",
@@ -120,26 +124,17 @@ def set_dash_layout(current_username, selected_format):
         )
         fig.update_xaxes(showticklabels = False)
 
-        ############ W/L PIE CHART HELL #############
-        latest = plots_df.tail(1)
-        wins = int(latest["wins"])
-        losses = int(latest["losses"])
-        pie_df = pd.DataFrame({
-        'result': ['Wins', 'Losses'],
-        'count': [wins, losses]
-        })
+        ############ W/L PIE CHART #############
         pie_fig = px.pie(
         pie_df,
         values = "count",
         names = "result",
         color = "result",
         color_discrete_map= {"Wins": "#4CAF50", "Losses": "#E84057"},
-        hole = 0.5,
+        hole = 0.7,
         template = "plotly_dark",
-        width=400, 
         height=200
         )
-
         pie_fig.update_traces(
         textposition="inside",
         textinfo="label+percent",
@@ -147,22 +142,65 @@ def set_dash_layout(current_username, selected_format):
         pull=[0, 0],
         hoverinfo="label+value",
         )
-
         pie_fig.update_layout(
         margin=dict(l=0, r=0, t=0, b=0),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",   
         )
 
-    dash_app.layout = html.Div(
-            [
-                html.H2(f"{current_username} Profile"),
-                dcc.Graph(id="elo-graph", figure=fig),
-
-                html.H5("Win/Loss ratio"),
-                dcc.Graph(id="wl-pie", figure=pie_fig),
-            ]
+    #### Cards for layout ####
+    card_elo = dbc.Card(
+        [
+            dbc.CardHeader(f"{current_username} {selected_format} Profile"),
+            dbc.CardBody(
+                [
+                    dcc.Graph(id = "elo-graph", figure = fig)
+                ]
+            )
+        ]
     )
+
+    card_wl = dbc.Card(
+        [
+            dbc.CardHeader("Win-Loss"),
+            dbc.CardBody(
+                [
+                    dcc.Graph(id = "wl-graph", figure = pie_fig)
+                ]
+
+            )
+        ]
+    )
+
+    card_stats = dbc.Card(
+        [
+            dbc.CardHeader("Stats"),
+            dbc.CardBody(
+                [
+                    html.P(f"Highest ELO: {peak_elo}"),
+                    html.P(f"Highest GXE: {peak_gxe}"),
+                    html.P(f"Current ELO: {int(latest['elo'])}"),
+                    html.P(f"Current GXE: {float(latest['gxe'])}"),
+                    ### TODO make last 10 games record
+                ]
+            )
+        ]
+    )
+
+    ##### DISPLAY #####
+    dash_app.layout = dbc.Container(
+        [
+            dbc.Row([dbc.Col(card_elo, width = 12)]), 
+
+            dbc.Row(
+                [
+                dbc.Col(card_wl, width = 4),
+                dbc.Col(card_stats, width = 4)
+                ]
+                )
+        ]
+    )
+
 
 # Page
 @app.route("/", methods = ["GET", "POST"])

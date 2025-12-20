@@ -112,7 +112,8 @@ def set_dash_layout(current_username, selected_format):
         pie_fig.update_layout(
         margin=dict(l=0, r=0, t=0, b=0),
         paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",   
+        plot_bgcolor="rgba(0,0,0,0)",
+        hoverlabel = dict(font_color = "white")   
         )
 
         # misc stats display
@@ -174,7 +175,8 @@ def set_dash_layout(current_username, selected_format):
         pie_fig.update_layout(
         margin=dict(l=0, r=0, t=0, b=0),
         paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",   
+        plot_bgcolor="rgba(0,0,0,0)",
+        hoverlabel = dict(font_color = "white")     
         )
 
         #### misc stats ####

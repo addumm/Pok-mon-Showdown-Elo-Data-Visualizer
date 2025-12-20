@@ -10,7 +10,7 @@ class ShowdownUserError(Exception):
 class ShowdownUnavailableError(Exception):
     pass
 
-
+### string handled and formatted in app.py ###
 def fetch_current_ratings(username: str) -> pd.DataFrame:
     user_link = "https://pokemonshowdown.com/users/" + username + ".json"
 
@@ -37,6 +37,7 @@ def fetch_current_ratings(username: str) -> pd.DataFrame:
 
     user_dict = json.loads(r.text)
 
+    #### HANDLE USERS WITH NO GAMES / RATINGS / NEW ACCOUNTS ####
     if not user_dict["ratings"]:
         df = pd.DataFrame(
             {
@@ -52,6 +53,7 @@ def fetch_current_ratings(username: str) -> pd.DataFrame:
         )
         return df
 
+    #### HANDLE ALL OTHER USERS ####
     df_ratings = pd.DataFrame(user_dict["ratings"]).T
     df_ratings = df_ratings.reset_index().rename(columns = {"index": "format"})
 

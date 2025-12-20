@@ -326,7 +326,7 @@ def index():
         if not selected_format and formats:
             selected_format = formats[0]
 
-        #visualizations done via dash
+        #### CALL DASH-PLOTLY VISUALIZATIONS ####
         if selected_format:
             set_dash_layout(current_username, selected_format)
 

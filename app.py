@@ -9,11 +9,14 @@ import plotly.express as px
 from dash import Dash, html, dcc
 import dash_bootstrap_components as dbc
 from models import db, PlayerRating
+import os
 
 app = Flask(__name__)
 Scss(app)
 
-app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///elo.db"
+db_url = os.getenv("DATABASE_URL", "sqlite:///elo.db")
+
+app.config["SQLALCHEMY_DATABASE_URI"] = db_url
 db.init_app(app)
 
 # embedded dash app in flask

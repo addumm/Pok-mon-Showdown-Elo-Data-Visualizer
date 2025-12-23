@@ -1,3 +1,5 @@
+# [showdownstats.com](https://showdownstats.com/)
+
 ## Motivation
 Seeing that there are not many progress tracking data visualization tools for pokemon (specifically pokemon showdown) compared to many other online games, I decided to build one myself. 
 Displaying elo time series data was the main goal, which had been done previously, thus much inspiration is drawn from https://pokemonshowdownuserstats.com/ ([git](https://github.com/pnbruce/pokemon-showdown-user-stats)). 

@@ -58,9 +58,5 @@ def grab_new():
         db.session.commit()
 
 
-schedule.every(2).minutes.do(grab_new)
-
-
-while True:
-    schedule.run_pending()
-    time.sleep(1)
+if __name__ == "__main__":
+    grab_new()

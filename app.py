@@ -15,9 +15,11 @@ app = Flask(__name__)
 Scss(app)
 
 db_url = os.getenv("DATABASE_URL", "sqlite:///elo.db")
-
 app.config["SQLALCHEMY_DATABASE_URI"] = db_url
 db.init_app(app)
+
+with app.app_context():
+    db.create_all()
 
 # embedded dash app in flask
 dash_app = Dash(
@@ -349,8 +351,5 @@ def index():
                                )
 
 
-if __name__ in "__main__":
-    with app.app_context():
-        db.create_all()
-
-    app.run(debug = True)
+if __name__ == "__main__":
+    app.run(host = '0.0.0.0', port = 8000, debug = True)

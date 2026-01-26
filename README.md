@@ -1,4 +1,6 @@
 # [showdownstats.com](https://showdownstats.com/)
+![showdownstats](https://github.com/addumm/Pok-mon-Showdown-Elo-Data-Visualizer/blob/main/Screenshot%202026-01-25%20230735.png?raw=true)
+
 
 ## Motivation
 Seeing that there are not many progress tracking data visualization tools for pokemon (specifically pokemon showdown) compared to many other online games, I decided to build one myself. 
@@ -12,7 +14,7 @@ This soon turned into a hybrid flask-dash web app to ensure plotly (the data vis
 The core functionality of the app is intaking pokemon showdown account usernames, calling the pokemonshowdown API for the account ratings, and storing the user and ratings for each ladder format in a postgres database. 
 To track the accounts, there is a rate scheduled task to call the pokemonshowdown API and fetch the ratings/elo/gxe/etc. of each distinct user in the database, then add new ratings to the database. 
 New formats played are automatically handled thanks to this. 
-I should also note that I used this project as an opportunity to learn more about docker and AWS, thus the app is containerized via docker and deployed through AWS.
+I should also note that I used this project as an opportunity to learn how to use docker and AWS, thus the app is containerized via docker and deployed through AWS.
 
 
 ## How to use

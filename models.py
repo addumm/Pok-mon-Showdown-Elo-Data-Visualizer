@@ -5,7 +5,7 @@ db = SQLAlchemy()
 
 class PlayerRating(db.Model):
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    userid = db.Column(db.String(18), nullable=False)
+    userid = db.Column(db.String(18), nullable=False, index = True)
     username = db.Column(db.String(18), nullable=False)
     format = db.Column(db.String)
     elo = db.Column(db.Float, nullable=False)
@@ -16,3 +16,11 @@ class PlayerRating(db.Model):
 
     def __repr__(self) -> str:
         return f"player {self.id}"
+
+class MatchHistory(db.Model):
+    __tablename_ = "match_history"
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    userid = db.Column(db.String(18), nullable=False, index = True)
+    format = db.Column(db.String, nullable = False)
+    timestamp = db.Column(db.DateTime, default=datetime.now)
+    indicator = db.Column(db.String(1), nullable = False)

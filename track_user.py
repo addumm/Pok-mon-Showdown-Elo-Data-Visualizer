@@ -1,11 +1,11 @@
-# for each distinct user in databse, check their rankings every X minutes (perhaps X = 3)?
+# for each distinct user in databse, check their rankings every X minutes (perhaps 3 min?)
 # if rating stays the same in a format, don't add new row to database. if rating does change for specific format, add row
 # also need to process new formats user might have started since adding their username to database
 
 import schedule
 import time
 from showdown_client import fetch_current_ratings, ShowdownUnavailableError, ShowdownUserError
-from app import db, PlayerRating, app
+from app import db, PlayerRating, MatchHistory, app
 from sqlalchemy import select, desc
 
 
@@ -42,6 +42,56 @@ def grab_new():
                                      latest_in_db.gxe == new_gxe):
                     continue
 
+                prev_wins = latest_in_db.wins if latest_in_db else 0
+                prev_losses = latest_in_db.losses if latest_in_db else 0
+
+                raw_prev_wins = prev_wins
+                raw_prev_losses = prev_losses
+
+                if latest_in_db and (new_wins < latest_in_db.wins):
+                    raw_prev_wins = 0
+
+                if latest_in_db and (new_losses < latest_in_db.losses):
+                    raw_prev_losses = 0
+
+                win_diff = new_wins - raw_prev_wins
+                loss_diff = new_losses - raw_prev_losses
+
+                if win_diff == 0 and loss_diff == 0:
+                    continue
+
+                for _ in range(win_diff):
+                    db.session.add(MatchHistory(
+                        userid=userid, 
+                        format=fmt, 
+                        indicator='W', 
+                        timestamp=row["timestamp"]
+                    ))
+
+                for _ in range(loss_diff):
+                    db.session.add(MatchHistory(
+                        userid=userid, 
+                        format=fmt, 
+                        indicator='L', 
+                        timestamp=row["timestamp"]
+                    ))
+
+                db.session.flush()
+
+                matches = (
+                    db.session.query(MatchHistory)
+                    .filter_by(userid=userid, format=fmt)
+                    .order_by(MatchHistory.timestamp.desc())
+                    .all()
+                )
+
+                if len(matches) > 10:
+                    for old_match in matches[10:]:
+                        db.session.delete(old_match)
+
+                accumulated_wins = prev_wins + win_diff
+                accumulated_losses = prev_losses + loss_diff
+
                 db.session.add(
                     PlayerRating(
                         userid = userid,
@@ -49,10 +99,9 @@ def grab_new():
                         format = fmt,
                         elo = new_elo,
                         gxe = new_gxe,
-                        wins = new_wins,
-                        losses = new_losses,
-                        timestamp = row["timestamp"]
-
+                        wins = accumulated_wins,
+                        losses = accumulated_losses,
+                        timestamp = row["timestamp"],
                     )
                 )
         db.session.commit()

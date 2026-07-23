@@ -8,7 +8,7 @@ import re
 import plotly.express as px
 from dash import Dash, html, dcc
 import dash_bootstrap_components as dbc
-from models import db, PlayerRating
+from models import db, PlayerRating, MatchHistory
 import os
 
 app = Flask(__name__)
@@ -192,9 +192,14 @@ def set_dash_layout(current_username, selected_format):
         total_games = f"Total Games: {int(latest['wins'] + latest['losses'])}"
 
         ### calculate last 10 games record ###
-        last_10_df = plots_df.tail(10)
-        recent = f"Recent Games: {int(last_10_df['wins'].iloc[-1] - last_10_df['wins'].iloc[0])}W {int(last_10_df['losses'].iloc[-1] - last_10_df['losses'].iloc[0])}L"
+        recent_matches = (db.session.query(MatchHistory.indicator).filter_by(
+            userid=current_username, format = selected_format).order_by(
+                MatchHistory.timestamp.desc()).limit(10).all())
+        wins = sum(1 for i in recent_matches if i.indicator == "W")
+        losses = sum(1 for i in recent_matches if i.indicator == "L")
 
+        recent = f"Recent Games: {wins}W {losses}L"
+        
     #### Cards for layout ####
     card_elo = dbc.Card(
         [

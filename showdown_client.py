@@ -66,3 +66,7 @@ def fetch_current_ratings(username: str) -> pd.DataFrame:
     df["timestamp"] = pd.Timestamp.now()
 
     return df
+
+def recent_teams(username: str) -> pd.DataFrame:
+    user_replays = "replay.pokemonshowdown.com/search.json?user=" + username
+    

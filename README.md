@@ -1,4 +1,4 @@
-# [showdownstats.com](https://showdownstats.com/)
+# [showdownstats.com](https://showdownstats.com/) (taken down for now, ran out of aws free tokens)
 ![showdownstats](https://github.com/addumm/Pok-mon-Showdown-Elo-Data-Visualizer/blob/main/Screenshot%202026-01-25%20230735.png?raw=true)
 
 

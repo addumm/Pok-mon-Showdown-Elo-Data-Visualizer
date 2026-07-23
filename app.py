@@ -52,6 +52,7 @@ def set_dash_layout(current_username, selected_format):
     #query into df for plotly
     plots_df = pd.read_sql(stmt, db.engine)
 
+
     #### HANDLE BRAND NEW ACCOUNTS/'NONE' FORMAT ####
     if plots_df.empty or plots_df["format"].empty:
         fig = px.line(title="No data for this user/format",
@@ -70,8 +71,9 @@ def set_dash_layout(current_username, selected_format):
         peak_gxe = 0
         current_elo = 1000
         current_gxe = 0
-        recent = "Record: 0W 0L"
-        total_games = f"Total Games: 0"
+        total_games = 0
+        wins = 0
+        losses = 0
 
     elif len(plots_df) == 1:
         plots_df["elo"] = round(plots_df["elo"])
@@ -82,11 +84,27 @@ def set_dash_layout(current_username, selected_format):
             plots_df,
             x="timestamp",
             y="elo",
-            title=f"Elo Over Time for {selected_format}",
+            title=f"Elo Progression for {selected_format}",
             template = "plotly_dark"
-            )
-        fig.update_xaxes(showticklabels = False)
+        )
+        fig.update_layout(
+            title={
+                'text': f"Elo Progression for {selected_format}",
+                'y': 0.95,
+                'x': 0.5,
+                'xanchor': 'center',
+                'yanchor': 'top'
+            },
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            font=dict(color="#8c9baf", family="Inter, sans-serif"),
+            xaxis=dict(showticklabels = False, showgrid=False, zeroline=False),
+            yaxis=dict(gridcolor="#2b3346", zeroline=False, dtick=50, tick0=50),
+            margin=dict(l=50, r=30, t=60, b=40),
+            autosize=True
+        )
 
+        fig.update_traces(line_color="#6c5ce7", line_width=3)
         ######## WL pie chart ########
         latest = plots_df.tail(1)
         wins = int(latest["wins"])
@@ -126,8 +144,9 @@ def set_dash_layout(current_username, selected_format):
         peak_gxe = plots_df["gxe"].max()
         current_elo = int(latest["elo"])
         current_gxe = float(latest["gxe"])
-        recent = f"Current Record: {wins} - {losses}"
-        total_games = f"Total Games: {int(latest['wins'] + latest['losses'])}"
+        total_games = int(latest['wins'] + latest['losses'])
+
+    
 
     else:
         plots_df["elo"] = round(plots_df["elo"])
@@ -138,17 +157,28 @@ def set_dash_layout(current_username, selected_format):
             plots_df,
             x="timestamp",
             y="elo",
-            title=f"Elo Over Time for {selected_format}",
+            title=f"Elo Progression for {selected_format}",
             template = "plotly_dark"
         )
+
         fig.update_layout(
-            yaxis=dict(
-            dtick=100,
-            tick0= 1000),
-            xaxis_title="Timestamp",
-            yaxis_title = "Elo"
+            title={
+                'text': f"Elo Progression for {selected_format}",
+                'y': 0.95,
+                'x': 0.5,
+                'xanchor': 'center',
+                'yanchor': 'top'
+            },
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            font=dict(color="#8c9baf", family="Inter, sans-serif"),
+            xaxis=dict(showticklabels = False, showgrid=False, zeroline=False),
+            yaxis=dict(gridcolor="#2b3346", zeroline=False, dtick=50, tick0=50),
+            margin=dict(l=50, r=30, t=60, b=40),
+            autosize=True
         )
-        fig.update_xaxes(showticklabels = False)
+
+        fig.update_traces(line_color="#6c5ce7", line_width=3)
 
         ############ W/L PIE CHART #############
         latest = plots_df.tail(1)
@@ -169,19 +199,22 @@ def set_dash_layout(current_username, selected_format):
         template = "plotly_dark",
         height=200
         )
+
         pie_fig.update_traces(
         textposition="inside",
-        textinfo="label+percent",
-        marker=dict(line=dict(color="#111111", width=1)),
+        textinfo="percent",
+        marker=dict(line=dict(color="#1c212e", width=2)),
         pull=[0, 0],
         hoverinfo="label+value",
-        textfont = {"color": "white"}
+        textfont={"color": "white", "size": 13}
         )
         pie_fig.update_layout(
-        margin=dict(l=0, r=0, t=0, b=0),
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        hoverlabel = dict(font_color = "white")     
+            margin=dict(l=20, r=20, t=20, b=20),
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            hoverlabel=dict(font_color="white"),
+            showlegend=True,
+            autosize=True
         )
 
         #### misc stats ####
@@ -189,7 +222,7 @@ def set_dash_layout(current_username, selected_format):
         peak_gxe = plots_df["gxe"].max()
         current_elo = int(latest["elo"])
         current_gxe = float(latest["gxe"])
-        total_games = f"Total Games: {int(latest['wins'] + latest['losses'])}"
+        total_games = int(latest['wins'] + latest['losses'])
 
         ### calculate last 10 games record ###
         recent_matches = (db.session.query(MatchHistory.indicator).filter_by(
@@ -198,15 +231,72 @@ def set_dash_layout(current_username, selected_format):
         wins = sum(1 for i in recent_matches if i.indicator == "W")
         losses = sum(1 for i in recent_matches if i.indicator == "L")
 
-        recent = f"Recent Games: {wins}W {losses}L"
-        
-    #### Cards for layout ####
-    card_elo = dbc.Card(
+    card_stats = dbc.Card(
         [
-            dbc.CardHeader(f"{current_username} {selected_format} Profile"),
+            dbc.CardHeader("Player Statistics"),
             dbc.CardBody(
                 [
-                    dcc.Graph(id = "elo-graph", figure = fig)
+
+                    dbc.Row(
+                        [
+                            dbc.Col([
+                                html.Div("Current Elo ", className="stat-label"),
+                                html.Div(f"{current_elo}", className="stat-value primary-stat")
+                            ], width=6),
+                            dbc.Col([
+                                html.Div("Peak Elo ", className="stat-label"),
+                                html.Div(f"{peak_elo}", className="stat-value")
+                            ], width=6),
+                        ],
+                        className="mb-3"
+                    ),
+
+                    dbc.Row(
+                        [
+                            dbc.Col([
+                                html.Div("Current GXE ", className="stat-label"),
+                                html.Div(f"{current_gxe}%", className="stat-value primary-stat")
+                            ], width=6),
+                            dbc.Col([
+                                html.Div("Peak GXE ", className="stat-label"),
+                                html.Div(f"{peak_gxe}%", className="stat-value")
+                            ], width=6),
+                        ],
+                        className="mb-3"
+                    ),
+                    html.Hr(className="stat-divider"),
+
+                    dbc.Row(
+                        [
+                            dbc.Col([
+                                html.Div("Recent Games ", className="stat-label"),
+                                html.Div([
+                                    html.Span(f"{wins}W ", className="badge-win"),
+                                    html.Span(f"{losses}L", className="badge-loss"),
+                                ])
+                            ], width=6),
+                            dbc.Col([
+                                html.Div("Total Games ", className="stat-label"),
+                                html.Div(f"{total_games}", className="stat-value")
+                            ], width=6),
+                        ]
+                    )
+                ]
+            )
+        ],
+        className="h-100"
+    )
+
+    card_elo = dbc.Card(
+        [
+            dbc.CardHeader(f"{current_username} — {selected_format} Performance"),
+            dbc.CardBody(
+                [
+                    dcc.Graph(
+                        id="elo-graph", 
+                        figure=fig,
+                        config={'displayModeBar': False}
+                    )
                 ]
             )
         ]
@@ -214,26 +304,14 @@ def set_dash_layout(current_username, selected_format):
 
     card_wl = dbc.Card(
         [
-            dbc.CardHeader("Win-Loss", style={'textAlign': 'center'}),
+            dbc.CardHeader("Win / Loss Ratio"),
             dbc.CardBody(
                 [
-                    dcc.Graph(id = "wl-graph", figure = pie_fig)
-                ]
-
-            )
-        ]
-    )
-
-    card_stats = dbc.Card(
-        [
-            dbc.ListGroup(
-                [
-                    dbc.ListGroupItem(f"{recent}", style={'textAlign': 'center'}),
-                    dbc.ListGroupItem(total_games, style={'textAlign': 'center'}),
-                    dbc.ListGroupItem(f"Highest ELO: {peak_elo}", style={'textAlign': 'center'}),
-                    dbc.ListGroupItem(f"Highest GXE: {peak_gxe}", style={'textAlign': 'center'}),
-                    dbc.ListGroupItem(f"Current ELO: {current_elo}", style={'textAlign': 'center'}),
-                    dbc.ListGroupItem(f"Current GXE: {current_gxe}", style = {'textAlign': 'center'})
+                    dcc.Graph(
+                        id="wl-graph", 
+                        figure=pie_fig,
+                        config={'displayModeBar': False}
+                    )
                 ]
             )
         ]
@@ -241,10 +319,13 @@ def set_dash_layout(current_username, selected_format):
 
     teams_stats = dbc.Card(
         [
-            dbc.CardHeader("Recent Teams", style={'textAlign': 'center'}),
+            dbc.CardHeader("Match History & Teams"),
             dbc.CardBody(
                 [
-                    html.P("Coming soon!")
+                    html.Div(
+                        "Match history details coming soon...", 
+                        style={"color": "#8c9baf", "textAlign": "center", "padding": "40px 0"}
+                    )
                 ]
             )
         ]
@@ -253,18 +334,20 @@ def set_dash_layout(current_username, selected_format):
     ##### DISPLAY #####
     dash_app.layout = dbc.Container(
         [
-            dbc.Row([dbc.Col(card_elo, width = 12, className='mb-2')]), 
+            dbc.Row([dbc.Col(card_elo, width=12, className='mb-3')]), 
 
             dbc.Row(
                 [
-                dbc.Col(card_wl, width = {'size': 4}, className='mb-2'),
-                dbc.Col(card_stats, width = {'size': 4}, className='mb-2'),
-                dbc.Col(teams_stats, width = {'size': 4}, className = 'mb-2')
-                ]
-                )
-        ]
+                    dbc.Col(card_stats, xs=12, md=4, className='mb-3'),
+                    dbc.Col(card_wl, xs=12, md=4, className='mb-3'),
+                    dbc.Col(teams_stats, xs=12, md=4, className='mb-3')
+                ],
+                className="g-3"
+            )
+        ],
+        fluid=True,
+        style={"padding": "20px 30px"}
     )
-
 
 # Page
 @app.route("/", methods = ["GET", "POST"])
@@ -332,7 +415,7 @@ def index():
                                                             )
         formats = [f[0] for f in formats]
 
-        # choose first format if nothing is selected
+        # pick first format if nothing is selected
         if not selected_format and formats:
             selected_format = formats[0]
 

@@ -26,6 +26,36 @@ def grab_new():
             except Exception as e:
                 continue
 
+            if df.empty:
+                continue
+
+            null_placeholder = (
+                db.session.query(PlayerRating)
+                .filter(
+                    PlayerRating.userid == userid,
+                    (PlayerRating.format.is_(None)) | (PlayerRating.format == "None")
+                )
+                .first()
+            )
+
+            if null_placeholder:
+                first_real_format = df.iloc[0]["format"]
+
+                existing_format_row = (
+                    db.session.query(PlayerRating)
+                    .filter(
+                        PlayerRating.userid == userid,
+                        PlayerRating.format == first_real_format
+                    )
+                    .first()
+                )
+
+                if not existing_format_row:
+                    null_placeholder.format = first_real_format
+                    null_placeholder.username = df.iloc[0]["username"]
+
+                db.session.commit()
+
             for _, row in df.iterrows():
                 fmt = row["format"]
                 latest_in_db = (

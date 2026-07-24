@@ -67,6 +67,29 @@ def fetch_current_ratings(username: str) -> pd.DataFrame:
 
     return df
 
-def recent_teams(username: str) -> pd.DataFrame:
-    user_replays = "replay.pokemonshowdown.com/search.json?user=" + username
+def recent_teams(userid: str, format: str) -> pd.DataFrame:
+    user_replays = "replay.pokemonshowdown.com/search.json?user=" + userid
+    
+    try:
+        r = requests.get(user_replays)
+        r.raise_for_status()
+    except HTTPError as e:
+        status = e.response.status_code
+
+        if status == 403:
+            raise ShowdownUserError("invalid username")
+        
+        elif status == 404:
+            raise ShowdownUserError("user not found")
+        
+        elif status == 503:
+            raise ShowdownUnavailableError("server unavailable")
+
+        else:
+            raise
+        
+    except requests.exceptions.RequestException:
+        raise ShowdownUnavailableError("network error")
+
+    replay_dict = json.loads(r.text)
     

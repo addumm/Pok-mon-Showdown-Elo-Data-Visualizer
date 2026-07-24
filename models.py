@@ -18,7 +18,7 @@ class PlayerRating(db.Model):
         return f"player {self.id}"
 
 class MatchHistory(db.Model):
-    __tablename_ = "match_history"
+    __tablename__ = "match_history"
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     userid = db.Column(db.String(18), nullable=False, index = True)
     format = db.Column(db.String, nullable = False)

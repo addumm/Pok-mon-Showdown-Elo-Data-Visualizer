@@ -1,7 +1,6 @@
 # for each distinct user in databse, check their rankings every X minutes (perhaps 3 min?)
 # if rating stays the same in a format, don't add new row to database. if rating does change for specific format, add row
 # also need to process new formats user might have started since adding their username to database
-
 import schedule
 import time
 from showdown_client import fetch_current_ratings, ShowdownUnavailableError, ShowdownUserError
@@ -28,7 +27,8 @@ def grab_new():
 
             if df.empty:
                 continue
-
+            
+            ### Handling NULL placeholders for users without games yet ###
             null_placeholder = (
                 db.session.query(PlayerRating)
                 .filter(
@@ -108,6 +108,7 @@ def grab_new():
 
                 db.session.flush()
 
+                ### Using MatchHistory table as a 10 game buffer for each users format to calculate last 10 games record ###
                 matches = (
                     db.session.query(MatchHistory)
                     .filter_by(userid=userid, format=fmt)
@@ -137,5 +138,8 @@ def grab_new():
         db.session.commit()
 
 
-if __name__ == "__main__":
+"""if __name__ == "__main__":
+    grab_new()"""
+while True:
     grab_new()
+    time.sleep(120)

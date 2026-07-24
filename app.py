@@ -124,19 +124,22 @@ def set_dash_layout(current_username, selected_format):
         template = "plotly_dark",
         height=200
         )
+
         pie_fig.update_traces(
         textposition="inside",
-        textinfo="label+percent",
-        marker=dict(line=dict(color="#111111", width=1)),
+        textinfo="percent",
+        marker=dict(line=dict(color="#1c212e", width=2)),
         pull=[0, 0],
         hoverinfo="label+value",
-        textfont = {"color": "white"}
+        textfont={"color": "white", "size": 13}
         )
         pie_fig.update_layout(
-        margin=dict(l=0, r=0, t=0, b=0),
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        hoverlabel = dict(font_color = "white")   
+            margin=dict(l=20, r=20, t=20, b=20),
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            hoverlabel=dict(font_color="white"),
+            showlegend=True,
+            autosize=True
         )
 
         # misc stats display

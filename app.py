@@ -52,6 +52,104 @@ def set_dash_layout(current_username, selected_format):
     #query into df for plotly
     plots_df = pd.read_sql(stmt, db.engine)
 
+    try:
+        user_teams = replay_search(current_username, selected_format)
+    except:
+        user_teams = {}
+    if user_teams:
+        replay_cards = []
+        for replay_id, team_species in list(user_teams.items())[:10]:
+            replay_url = f"https://replay.pokemonshowdown.com/{replay_id}"
+
+            sprite_imgs = [
+                html.Img(
+                    src = get_sprite_url(species),
+                    title = species,
+                    style = {
+                        "height": "48px",
+                         "width": "48px",
+                         "marginRight": "6px",
+                         "objectFit": "contain",
+                    }
+                )
+                for species in team_species
+            ]
+            
+            row = html.Div(
+                [
+                    html.Div(
+                        [
+                            html.A(
+                                f"Replay: {replay_id}",
+                                href=replay_url,
+                                target="_blank",
+                                style={
+                                    "color": "#6c5ce7",
+                                    "fontWeight": "600",
+                                    "textDecoration": "none",
+                                    "fontSize": "0.85rem",
+                                },
+                            ),
+                        ],
+                        style={"marginBottom": "4px"},
+                    ),
+                    html.Div(
+                        sprite_imgs,
+                        style={
+                            "display": "flex",
+                            "alignItems": "center",
+                            "flexWrap": "wrap",
+                        },
+                    ),
+                ],
+                style={
+                    "backgroundColor": "#121621",
+                    "padding": "10px 14px",
+                    "borderRadius": "8px",
+                    "marginBottom": "10px",
+                    "border": "1px solid #2b3346",
+                },
+            )
+            replay_cards.append(row)
+        
+        teams_content = html.Div(
+            replay_cards,
+            style={
+                "maxHeight": "340px",
+                "overflowY": "auto",
+                "paddingRight": "6px",
+            },
+        )
+    else:
+        teams_content = html.Div(
+            "No teams found for this format.",
+            style={
+                "color": "#8c9baf",
+                "textAlign": "center",
+                "padding": "40px 0",
+                "fontSize": "0.9rem",
+            },
+        )
+        teams_card = dbc.Card(
+        [
+            dbc.CardHeader(
+                f"Recent Teams ({selected_format})",
+                style={"fontWeight": "bold"},
+            ),
+            dbc.CardBody([teams_content]),
+        ],
+        className="h-100",
+    )
+        
+    teams_stats = dbc.Card(
+        [
+            dbc.CardHeader(
+                "Match History & Teams", style={"fontWeight": "600"}
+            ),
+            dbc.CardBody([teams_content], style={"padding": "12px"}),
+        ],
+        className="h-100",
+    )
 
     #### HANDLE BRAND NEW ACCOUNTS/'NONE' FORMAT ####
     if plots_df.empty or plots_df["format"].empty:
@@ -320,19 +418,7 @@ def set_dash_layout(current_username, selected_format):
         ]
     )
 
-    teams_stats = dbc.Card(
-        [
-            dbc.CardHeader("Match History & Teams"),
-            dbc.CardBody(
-                [
-                    html.Div(
-                        "Match history details coming soon...", 
-                        style={"color": "#8c9baf", "textAlign": "center", "padding": "40px 0"}
-                    )
-                ]
-            )
-        ]
-    )
+
 
     ##### DISPLAY #####
     dash_app.layout = dbc.Container(

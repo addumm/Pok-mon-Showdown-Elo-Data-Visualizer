@@ -2,7 +2,7 @@ from flask import Flask, render_template, request
 from flask_scss import Scss
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import select
-from showdown_client import fetch_current_ratings, ShowdownUnavailableError, ShowdownUserError
+from showdown_client import fetch_current_ratings, ShowdownUnavailableError, ShowdownUserError, get_sprite_url, replay_search
 import pandas as pd
 import re
 import plotly.express as px

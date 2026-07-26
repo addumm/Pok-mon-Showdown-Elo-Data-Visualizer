@@ -91,14 +91,16 @@ def replay_search(user:str, format: str):
     except requests.exceptions.RequestException:
         raise ShowdownUnavailableError("network error")
 
+    ### unravel the json ###
     replay_dict = json.loads(r.text)
-    filtered_data = [
-        item for item in replay_dict if item.get("format") == format
-    ]
+    target_format = normalize_format(format)
 
     extracted_teams = {}
 
-    for item in filtered_data:
+    for item in replay_dict:
+        if normalize_format(item.get("format", "")) != target_format:
+            continue
+
         replay_id = item["id"]
 
         exact_username = None
@@ -137,6 +139,7 @@ def replay_search(user:str, format: str):
                         team.append(species)
         if team:
             extracted_teams[replay_id] = team
+
     return extracted_teams
 
 def get_sprite_url(species: str) -> str:

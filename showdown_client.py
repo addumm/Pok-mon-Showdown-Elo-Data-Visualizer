@@ -3,6 +3,7 @@ from requests.exceptions import HTTPError
 import json
 import pandas as pd
 from io import StringIO
+import re
 
 class ShowdownUserError(Exception):
     pass
@@ -67,9 +68,8 @@ def fetch_current_ratings(username: str) -> pd.DataFrame:
 
     return df
 
-def recent_teams(userid: str, format: str) -> pd.DataFrame:
-    user_replays = "replay.pokemonshowdown.com/search.json?user=" + userid
-    
+def replay_search(user:str, format: str):
+    user_replays = "https://replay.pokemonshowdown.com/search.json?user=" + user
     try:
         r = requests.get(user_replays)
         r.raise_for_status()
@@ -92,4 +92,56 @@ def recent_teams(userid: str, format: str) -> pd.DataFrame:
         raise ShowdownUnavailableError("network error")
 
     replay_dict = json.loads(r.text)
-    
+    filtered_data = [
+        item for item in replay_dict if item.get("format") == format
+    ]
+
+    extracted_teams = {}
+
+    for item in filtered_data:
+        replay_id = item["id"]
+
+        exact_username = None
+        for player_name in item.get("players", []):
+            if player_name.lower() == user.lower():
+                exact_username = player_name
+                break
+
+        if not exact_username:
+            continue
+
+        log_url = "https://replay.pokemonshowdown.com/" + replay_id + ".log"
+        try:
+            res = requests.get(log_url)
+            res.raise_for_status()
+            log_text = res.text
+        except requests.exceptions.RequestException:
+            continue
+
+        player_slot = None
+        team = []
+
+        for line in log_text.splitlines():
+            if line.startswith("|player|"):
+                parts = line.split("|")
+                if len(parts) >= 4 and parts[3] == exact_username:
+                    player_slot = parts[2]
+                    break
+
+        if player_slot:
+            for line in log_text.splitlines():
+                if line.startswith("|poke|"):
+                    parts = line.split("|")
+                    if len(parts) >= 4 and parts[2] == player_slot:
+                        species = parts[3].split(",")[0]
+                        team.append(species)
+        if team:
+            extracted_teams[replay_id] = team
+    return extracted_teams
+
+def get_sprite_url(species: str) -> str:
+    pokemon_id = re.sub(r"[^a-z0-9]", "", species.lower())
+    return f"https://play.pokemonshowdown.com/sprites/gen5/{pokemon_id}.png"
+
+def normalize_format(format_str: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", format_str.lower())

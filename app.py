@@ -113,13 +113,13 @@ def set_dash_layout(current_username, selected_format):
             replay_cards.append(row)
         
         teams_content = html.Div(
-            replay_cards,
-            style={
-                "maxHeight": "340px",
-                "overflowY": "auto",
-                "paddingRight": "6px",
-            },
-        )
+        replay_cards,
+        style={
+            "overflowY": "auto",
+            "maxHeight": "210px",
+            "paddingRight": "4px",
+        },
+    )
     else:
         teams_content = html.Div(
             "No teams found for this format.",
@@ -130,13 +130,20 @@ def set_dash_layout(current_username, selected_format):
                 "fontSize": "0.9rem",
             },
         )
-        teams_card = dbc.Card(
+        teams_stats = dbc.Card(
         [
             dbc.CardHeader(
-                f"Recent Teams ({selected_format})",
-                style={"fontWeight": "bold"},
+                "Match History & Teams", style={"fontWeight": "600"}
             ),
-            dbc.CardBody([teams_content]),
+            dbc.CardBody(
+                [teams_content],
+                style={
+                    "padding": "12px",
+                    "display": "flex",
+                    "flexDirection": "column",
+                    "justifyContent": "flex-start",
+                },
+            ),
         ],
         className="h-100",
     )

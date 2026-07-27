@@ -159,6 +159,7 @@ def replay_search(user: str, format_name: str, limit: int = 10):
 
 
 def get_sprite_url(species: str) -> str:
+    #pokemon with hyphens (removed)
     BASE_HYPHEN_SPECIES = {
     "tinglu",
     "chiyu",
@@ -175,6 +176,7 @@ def get_sprite_url(species: str) -> str:
     if raw_clean in BASE_HYPHEN_SPECIES:
         pokemon_id = raw_clean
 
+    #splitting for check
     elif "-" in species:
         parts = species.split("-", 1)
         clean_base = re.sub(r"[^a-z0-9]", "", parts[0].lower())

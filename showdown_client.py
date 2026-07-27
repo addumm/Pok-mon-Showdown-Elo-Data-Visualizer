@@ -159,18 +159,33 @@ def replay_search(user: str, format_name: str, limit: int = 10):
 
 
 def get_sprite_url(species: str) -> str:
-    REGIONAL_FORMS = {"alola", "galar", "hisui", "paldea"}
-    if "-" in species:
-        base_part, form_part = species.split("-", 1)
+    BASE_HYPHEN_SPECIES = {
+    "tinglu",
+    "chiyu",
+    "chienpao",
+    "wochien",
+    "hooh",
+    "porygonz",
+    "jangmoo",
+    "hakamoo",
+    "kommoo",
+}
+    raw_clean = re.sub(r"[^a-z0-9]", "", species.lower())
 
-        clean_base = re.sub(r"[^a-z0-9]", "", base_part.lower())
-        clean_form = re.sub(r"[^a-z0-9]", "", form_part.lower())
+    if raw_clean in BASE_HYPHEN_SPECIES:
+        pokemon_id = raw_clean
 
-        if any(clean_form.startswith(region) for region in REGIONAL_FORMS):
+    elif "-" in species:
+        parts = species.split("-", 1)
+        clean_base = re.sub(r"[^a-z0-9]", "", parts[0].lower())
+        clean_form = re.sub(r"[^a-z0-9]", "", parts[1].lower())
+
+        if clean_form:
             pokemon_id = f"{clean_base}-{clean_form}"
         else:
-            pokemon_id = clean_base + clean_form
+            pokemon_id = clean_base
+
     else:
-        pokemon_id = re.sub(r"[^a-z0-9]", "", species.lower())
+        pokemon_id = raw_clean
 
     return f"https://play.pokemonshowdown.com/sprites/gen5/{pokemon_id}.png"

@@ -425,8 +425,6 @@ def set_dash_layout(current_username, selected_format):
         ]
     )
 
-
-
     ##### DISPLAY #####
     dash_app.layout = dbc.Container(
         [
@@ -533,7 +531,6 @@ def index():
                                formats = formats,
                                error_message = None
                                )
-
 
 if __name__ == "__main__":
     app.run(host = '0.0.0.0', port = 8000, debug = True)

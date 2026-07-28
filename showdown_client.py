@@ -134,7 +134,7 @@ def replay_search(user: str, format_name: str, limit: int = 10):
     target_format = normalize_format(format_name)
     target_user_id = normalize_format(user)
 
-    # filter matching formats & slice first to fetch the top n replays
+    # filter matching formats & slice first to fetch the top n=10 replays
     filtered_data = [
         item
         for item in replay_dict

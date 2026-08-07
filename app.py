@@ -256,8 +256,8 @@ def set_dash_layout(current_username, selected_format):
         fig.update_traces(line_color="#6c5ce7", line_width=3)
 
         latest = plots_df.tail(1)
-        wins = int(latest["wins"])
-        losses = int(latest["losses"])
+        wins = int(latest["wins"].iloc[0])
+        losses = int(latest["losses"].iloc[0])
         pie_df = pd.DataFrame(
             {"result": ["Wins", "Losses"], "count": [wins, losses]}
         )
@@ -291,9 +291,9 @@ def set_dash_layout(current_username, selected_format):
 
         peak_elo = int(plots_df["elo"].max())
         peak_gxe = plots_df["gxe"].max()
-        current_elo = int(latest["elo"])
-        current_gxe = float(latest["gxe"])
-        total_games = int(latest["wins"] + latest["losses"])
+        current_elo = int(latest["elo"].iloc[0])
+        current_gxe = float(latest["gxe"].iloc[0])
+        total_games = int(latest["wins"] + latest["losses"].iloc[0])
 
     else:
         plots_df["elo"] = round(plots_df["elo"])
@@ -327,8 +327,8 @@ def set_dash_layout(current_username, selected_format):
         fig.update_traces(line_color="#6c5ce7", line_width=3)
 
         latest = plots_df.tail(1)
-        wins = int(latest["wins"])
-        losses = int(latest["losses"])
+        wins = int(latest["wins"].iloc[0])
+        losses = int(latest["losses"].iloc[0])
         pie_df = pd.DataFrame(
             {"result": ["Wins", "Losses"], "count": [wins, losses]}
         )
@@ -364,9 +364,9 @@ def set_dash_layout(current_username, selected_format):
         
         peak_elo = int(plots_df["elo"].max())
         peak_gxe = plots_df["gxe"].max()
-        current_elo = int(latest["elo"])
-        current_gxe = float(latest["gxe"])
-        total_games = int(latest["wins"] + latest["losses"])
+        current_elo = int(latest["elo"].iloc[0])
+        current_gxe = float(latest["gxe"].iloc[0])
+        total_games = int((latest["wins"] + latest["losses"]).iloc[0])
 
         recent_matches = (
             db.session.query(MatchHistory.indicator)

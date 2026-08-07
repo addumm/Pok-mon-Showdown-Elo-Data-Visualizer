@@ -10,6 +10,7 @@ from dash import Dash, html, dcc
 import dash_bootstrap_components as dbc
 from models import db, PlayerRating, MatchHistory
 import os
+import random
 
 app = Flask(__name__)
 Scss(app)
@@ -449,6 +450,7 @@ def index():
     formats = []
     current_username = None
     error_message = None
+    random_pokemon_id = random.randint(1, 1025)
 
     if request.method == "POST":
         # parse usernames to alphanumeric
@@ -522,14 +524,16 @@ def index():
             current_username = current_username,
             formats=formats,
             error_message = None,
-            selected_format=selected_format
+            selected_format=selected_format,
+            header_sprite_id=random_pokemon_id,
         )
 
     else:
         return render_template("index.html", 
                                current_username = current_username, 
                                formats = formats,
-                               error_message = None
+                               error_message = None,
+                               header_sprite_id=random_pokemon_id,
                                )
 
 if __name__ == "__main__":

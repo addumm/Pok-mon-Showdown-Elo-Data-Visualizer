@@ -3,44 +3,60 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="{{url_for("static", filename = "styles.css")}}" />
-    <title>PS! Stats Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
+    <title>PS! Analytics</title>
 </head>
 <body>
-    <div class = "content">
-        <h1 style="color: white;">Pokemon Showdown Stats Dashboard</h1>
-    </div>
+    <header class="search-container">
+        <div class="search-box">
+            <div style="display: flex; align-items: center; gap: 8px; margin-right: 15px;">
+                <img 
+                    src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/{{ header_sprite_id or 25 }}.png" 
+                    alt="Pokemon Sprite"
+                    style="width: 38px; height: 38px; object-fit: contain; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.4));"
+                />
+                <h2 style="margin: 0; font-size: 1.2rem; font-weight: 700; color: #fff; whitespace: nowrap;">
+                    PS! Analytics
+                </h2>
+            </div>
+            <form method="POST" action="" style="display: flex; gap: 10px; width: 100%;">
+                <input type="text" name="username" placeholder="Enter Showdown Username..." id="username" value="{{ current_username or '' }}"/>
+                
+                {% if formats %}
+                <select name="format" id="format">
+                    <option value="" {% if not selected_format %}selected{% endif %}>Select Format</option>
+                    {% for fmt in formats %}
+                    <option value="{{ fmt }}" {% if fmt == selected_format %}selected{% endif %}>{{ fmt }}</option>
+                    {% endfor %}
+                </select>
+                {% else %}
+                <select name="format" id="format" disabled>
+                    <option value="">Format</option>
+                </select>
+                {% endif %}
 
-    <div>
-    <form method = "POST" action = "">
-        <input type = "text" name = "username" placeholder="Username" id = "username" value = "{{ current_username or ''}}"/>
-        {% if formats %}
-        <select name="format" id="format" class="format-select">
-            <option value="" {% if not selected_format %}selected{% endif %}>Select Format</option>
-          {% for fmt in formats %}
-            <option value="{{ fmt }}">{{ fmt }}</option>
-          {% endfor %}
-        </select>
+                <input type="submit" value="Search" id="btn_add">
+            </form>
+        </div>
+    </header>
 
-        {% else %}
-            <select name = "format" id = "format">
-                <option value = "">Format</option>
-            </select>
-        {% endif %}
-        <input type = "submit" value = "Submit" id = "btn_add">
-    </form>
-    </div>
-
-<hr>
     {% if error_message %}
-        <p> {{ error_message }} </p>
+        <div style="max-width: 700px; margin: 20px auto; padding: 12px 20px; background: rgba(255, 71, 87, 0.15); border: 1px solid #ff4757; border-radius: 8px; color: #ff4757; font-size: 0.9rem;">
+            ⚠️ {{ error_message }}
+        </div>
     {% endif %}
 
     {% if current_username and formats %}
-    <iframe
-        src="/elo/"
-        style= "width: 100%; min-height: 800px; border: none; overflow: hidden;">
-    </iframe>
+    <main style="padding: 20px 0;">
+        <iframe
+            src="/elo/"
+            style="width: 100%; min-height: 900px; border: none; overflow: hidden;">
+        </iframe>
+    </main>
     {% endif %}
 </body>
 </html>

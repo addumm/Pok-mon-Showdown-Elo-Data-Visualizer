@@ -134,7 +134,7 @@ def replay_search(user: str, format_name: str, limit: int = 10):
     target_format = normalize_format(format_name)
     target_user_id = normalize_format(user)
 
-    # filter matching formats & slice first to fetch the top n=10 replays
+    # filter matching formats & slice first to fetch the top limit=10 replays
     filtered_data = [
         item
         for item in replay_dict
@@ -143,7 +143,7 @@ def replay_search(user: str, format_name: str, limit: int = 10):
 
     extracted_teams = {}
 
-    # fetch log files concurrently using ThreadPoolExecutor
+    # fetch log files concurrently
     with ThreadPoolExecutor(max_workers=5) as executor:
         futures = [
             executor.submit(_fetch_single_replay_team, item, target_user_id)

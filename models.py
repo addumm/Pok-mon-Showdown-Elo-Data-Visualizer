@@ -1,5 +1,6 @@
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
+import json
 
 db = SQLAlchemy()
 
@@ -24,3 +25,11 @@ class MatchHistory(db.Model):
     format = db.Column(db.String, nullable = False)
     timestamp = db.Column(db.DateTime, default=datetime.now)
     indicator = db.Column(db.String(1), nullable = False)
+
+class ReplayCache(db.Model):
+    __tablename__ = "replay_cache"
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    userid = db.Column(db.String(18), nullable=False, index=True)
+    format = db.Column(db.String(50), nullable=False, index=True)
+    teams_json = db.Column(db.Text, nullable=False, default="{}")
+    updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)

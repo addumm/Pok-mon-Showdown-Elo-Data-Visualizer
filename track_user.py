@@ -4,7 +4,8 @@
 import schedule
 import time
 from showdown_client import fetch_current_ratings, ShowdownUnavailableError, ShowdownUserError
-from app import db, PlayerRating, MatchHistory, app
+from app import app
+from models import MatchHistory, PlayerRating, db
 from sqlalchemy import select, desc
 
 

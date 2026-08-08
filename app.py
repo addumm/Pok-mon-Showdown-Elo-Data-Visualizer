@@ -25,7 +25,9 @@ Scss(app)
 
 db_url = os.getenv("DATABASE_URL", "sqlite:///elo.db")
 if db_url.startswith("postgres://"):
-    db_url = db_url.replace("postgres://", "postgresql://", 1)
+    db_url = db_url.replace("postgres://", "postgresql+psycopg2://", 1)
+elif db_url.startswith("postgresql://"):
+    db_url = db_url.replace("postgresql://", "postgresql+psycopg2://", 1)
 
 app.config["SQLALCHEMY_DATABASE_URI"] = db_url
 app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
@@ -33,7 +35,6 @@ app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
     "pool_recycle": 280,
 }
 
-app.config["SQLALCHEMY_DATABASE_URI"] = db_url
 db.init_app(app)
 
 with app.app_context():
@@ -196,7 +197,7 @@ def set_dash_layout(current_username, selected_format):
         )
         .order_by(PlayerRating.timestamp)
     )
-    plots_df = pd.read_sql(stmt, db.engine)
+    plots_df = pd.read_sql(stmt, db.session.connection())
 
     # replay/history card with loading spinner ---
     teams_stats = dbc.Card(

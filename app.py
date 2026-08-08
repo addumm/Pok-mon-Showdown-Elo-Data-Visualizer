@@ -1,6 +1,8 @@
 from dash import Dash, Input, Output, dcc, html
 import dash_bootstrap_components as dbc
 from flask import Flask, render_template, request
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 from flask_scss import Scss
 from flask_sqlalchemy import SQLAlchemy
 import json
@@ -16,18 +18,33 @@ from showdown_client import (
     get_sprite_url,
     replay_search,)
 from sqlalchemy import select
-
 from models import MatchHistory, PlayerRating, ReplayCache, db
 
 app = Flask(__name__)
 Scss(app)
 
 db_url = os.getenv("DATABASE_URL", "sqlite:///elo.db")
+if db_url.startswith("postgres://"):
+    db_url = db_url.replace("postgres://", "postgresql://", 1)
+
+app.config["SQLALCHEMY_DATABASE_URI"] = db_url
+app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
+    "pool_pre_ping": True,
+    "pool_recycle": 280,
+}
+
 app.config["SQLALCHEMY_DATABASE_URI"] = db_url
 db.init_app(app)
 
 with app.app_context():
     db.create_all()
+
+limiter = Limiter(
+    get_remote_address,
+    app=app,
+    default_limits=["200 per day", "50 per hour"],
+    storage_uri="memory://",
+)
 
 # embedded dash app in flask
 dash_app = Dash(
@@ -534,6 +551,9 @@ def set_dash_layout(current_username, selected_format):
 
 # Page
 @app.route("/", methods=["GET", "POST"])
+@limiter.limit(
+    "5 per minute"
+)
 def index():
     formats = []
     current_username = None

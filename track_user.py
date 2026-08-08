@@ -139,8 +139,5 @@ def grab_new():
         db.session.commit()
 
 
-"""if __name__ == "__main__":
-    grab_new()"""
-while True:
+if __name__ == "__main__":
     grab_new()
-    time.sleep(120)

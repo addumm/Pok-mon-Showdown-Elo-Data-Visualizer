@@ -10,6 +10,8 @@ Flask-Executor==1.0.0
 Flask-Limiter==4.1.1
 Flask-Scss==0.5
 Flask-SQLAlchemy==3.1.1
+gevent==26.7.0
+greenlet==3.5.4
 gunicorn==23.0.0
 idna==3.11
 importlib_metadata==8.7.0
@@ -39,3 +41,5 @@ urllib3==2.6.2
 Werkzeug==3.1.4
 wrapt==2.3.0
 zipp==3.23.0
+zope.event==6.2
+zope.interface==8.5

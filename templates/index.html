@@ -1,6 +1,11 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <script>
+        // Detect browser's timezone and save it in a cookie
+        const userTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        document.cookie = "user_tz=" + userTz + ";path=/;max-age=31536000";
+      </script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link 

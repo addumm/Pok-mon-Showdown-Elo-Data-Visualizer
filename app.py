@@ -181,6 +181,7 @@ def load_replays_async(current_username, selected_format):
 
 
 def set_dash_layout(current_username, selected_format):
+    user_tz = request.cookies.get("user_tz", "UTC")
     stmt = (
         select(
             PlayerRating.userid,
@@ -198,20 +199,28 @@ def set_dash_layout(current_username, selected_format):
         .order_by(PlayerRating.timestamp)
     )
     plots_df = pd.read_sql(stmt, db.session.connection())
-    if not plots_df.empty:
-        # convert column using pd.to_datetime
-        plots_df["timestamp"] = pd.to_datetime(plots_df["timestamp"])
 
-        # if timestamps in postgre were saved without tz info, localize them to utc
+    if not plots_df.empty:
+        plots_df["timestamp"] = pd.to_datetime(plots_df["timestamp"])
+        
+        # Localize DB naive timestamp to UTC, then convert to User's Timezone
         if plots_df["timestamp"].dt.tz is None:
             plots_df["timestamp"] = plots_df["timestamp"].dt.tz_localize("UTC")
-
-        # plotly reads utc-aware pandas timestamps and converts the to the user's browser local timezone
-        fig = px.line(plots_df, x="timestamp", y="elo", title=f"ELO ({selected_format})")
         
-        fig.update_xaxes(
-            type="date",
-            tickformat="%b %d, %Y\n%I:%M %p"
+        try:
+            plots_df["timestamp"] = plots_df["timestamp"].dt.tz_convert(user_tz)
+        except Exception:
+            pass # Fallback to UTC if timezone string is unrecognized
+
+        # Format as string or pass directly to Plotly
+        plots_df["timestamp_str"] = plots_df["timestamp"].dt.strftime("%b %d, %Y %I:%M %p")
+
+        fig = px.line(
+            plots_df,
+            x="timestamp_str",  # Explicit local datetime string
+            y="elo",
+            title=f"Elo Progression for {selected_format}",
+            template="plotly_dark",
         )
 
     # replay/history card with loading spinner ---

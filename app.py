@@ -305,6 +305,8 @@ def set_dash_layout(current_username, selected_format):
             hoverlabel=dict(font_color="white"),
             showlegend=True,
             autosize=True,
+            legend_itemclick=False,
+            legend_itemdoubleclick=False,
         )
 
         peak_elo = int(plots_df["elo"].max())
@@ -377,6 +379,8 @@ def set_dash_layout(current_username, selected_format):
             hoverlabel=dict(font_color="white"),
             showlegend=True,
             autosize=True,
+            legend_itemclick=False,
+            legend_itemdoubleclick=False,
         )
 
         

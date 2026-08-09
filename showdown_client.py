@@ -7,7 +7,6 @@ import pandas as pd
 import requests
 from requests.exceptions import HTTPError
 
-
 class ShowdownUserError(Exception):
     pass
 
@@ -49,7 +48,7 @@ def fetch_current_ratings(username: str) -> pd.DataFrame:
                 "gxe": [0],
                 "w": [0],
                 "l": [0],
-                "timestamp": [pd.Timestamp.now()],
+                "timestamp": [pd.Timestamp.now(tz = "UTC")],
             }
         )
         return df
@@ -67,7 +66,7 @@ def fetch_current_ratings(username: str) -> pd.DataFrame:
         inplace=True,
     )
     df = df[["userid", "username", "format", "elo", "gxe", "w", "l"]]
-    df["timestamp"] = pd.Timestamp.now()
+    df["timestamp"] = pd.Timestamp.now(tz= "UTC")
 
     return df
 

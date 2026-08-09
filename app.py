@@ -198,6 +198,21 @@ def set_dash_layout(current_username, selected_format):
         .order_by(PlayerRating.timestamp)
     )
     plots_df = pd.read_sql(stmt, db.session.connection())
+    if not plots_df.empty:
+        # convert column using pd.to_datetime
+        plots_df["timestamp"] = pd.to_datetime(plots_df["timestamp"])
+
+        # if timestamps in postgre were saved without tz info, localize them to utc
+        if plots_df["timestamp"].dt.tz is None:
+            plots_df["timestamp"] = plots_df["timestamp"].dt.tz_localize("UTC")
+
+        # plotly reads utc-aware pandas timestamps and converts the to the user's browser local timezone
+        fig = px.line(plots_df, x="timestamp", y="elo", title=f"ELO ({selected_format})")
+        
+        fig.update_xaxes(
+            type="date",
+            tickformat="%b %d, %Y\n%I:%M %p"
+        )
 
     # replay/history card with loading spinner ---
     teams_stats = dbc.Card(

@@ -1,8 +1,11 @@
 from flask_sqlalchemy import SQLAlchemy
-from datetime import datetime
+from datetime import datetime, timezone
 import json
 
 db = SQLAlchemy()
+
+def get_utc_now():
+    return datetime.now(timezone.utc)
 
 class PlayerRating(db.Model):
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
@@ -13,7 +16,7 @@ class PlayerRating(db.Model):
     gxe = db.Column(db.Float)
     wins = db.Column(db.Integer)
     losses = db.Column(db.Integer)
-    timestamp = db.Column(db.DateTime, default=datetime.now)
+    timestamp = db.Column(db.DateTime, default=get_utc_now)
 
     def __repr__(self) -> str:
         return f"player {self.id}"

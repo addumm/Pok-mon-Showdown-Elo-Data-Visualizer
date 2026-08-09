@@ -352,6 +352,15 @@ def set_dash_layout(current_username, selected_format):
             title=f"Elo Progression for {selected_format}",
             template="plotly_dark",
         )
+        fig.update_traces(
+        line_color="#6c5ce7",
+        line_width=3,
+        fill="tozeroy",
+        fillcolor="rgba(108, 92, 231, 0.18)",
+        )
+
+        min_elo = max(plots_df["elo"].min() - 50, 900)
+
         fig.update_layout(
             title={
                 "text": f"Elo Progression for {selected_format}",
@@ -363,12 +372,20 @@ def set_dash_layout(current_username, selected_format):
             paper_bgcolor="rgba(0,0,0,0)",
             plot_bgcolor="rgba(0,0,0,0)",
             font=dict(color="#8c9baf", family="Inter, sans-serif"),
-            xaxis=dict(showticklabels=False, showgrid=False, zeroline=False),
-            yaxis=dict(gridcolor="#2b3346", zeroline=False, dtick=50, tick0=50),
+            yaxis=dict(
+                gridcolor="#2b3346",
+                zeroline=False,
+                range=[min_elo, plots_df["elo"].max() + 50],
+            ),
             margin=dict(l=50, r=30, t=60, b=40),
             autosize=True,
         )
-        fig.update_traces(line_color="#6c5ce7", line_width=3)
+        fig.update_xaxes(
+        type="category",
+        showgrid=False,
+        zeroline=False,
+        showticklabels=False,
+        )
 
         latest = plots_df.tail(1)
         wins = int(latest["wins"].iloc[0])

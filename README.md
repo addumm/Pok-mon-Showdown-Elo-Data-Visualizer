@@ -4,7 +4,7 @@
 
 ## Motivation
 Seeing that there are not many progress progress tracking tools for pokemon (specifically pokemon showdown) compared to many other online games, I decided to build one myself. 
-Displaying elo time series data was the main goal, which had been done previously, thus much inspiration is drawn from https://pokemonshowdownuserstats.com/ ([git](https://github.com/pnbruce/pokemon-showdown-user-stats)). I've added a few more features I thought were cool, such as recent teams used, win/loss visualization, peak rating/GXE information, and recent replays and teams used. Other inspiration is indirectly drawn from [op.gg](op.gg) as my little brother plays Leage of Legends. 
+Displaying elo time series data was the main goal, which had been done previously, thus much inspiration is drawn from https://pokemonshowdownuserstats.com/ ([git](https://github.com/pnbruce/pokemon-showdown-user-stats)). I've added a few more features I thought were cool, such as win/loss visualization, peak rating/GXE data, and recent replays and teams used. Other inspiration is indirectly drawn from [op.gg](op.gg) as my little brother plays Leage of Legends. 
 
 
 ## App Functionality Overview

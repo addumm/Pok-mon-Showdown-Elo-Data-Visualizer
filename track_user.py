@@ -1,115 +1,115 @@
-# for each distinct user in databse, check their rankings every X minutes (perhaps 3 min?)
-# if rating stays the same in a format, don't add new row to database. if rating does change for specific format, add row
-# also need to process new formats user might have started since adding their username to database
-import schedule
-import time
-from showdown_client import fetch_current_ratings, ShowdownUnavailableError, ShowdownUserError
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from app import app
 from models import MatchHistory, PlayerRating, db
-from sqlalchemy import select, desc
+from showdown_client import (
+    fetch_current_ratings,
+    ShowdownUnavailableError,
+    ShowdownUserError,
+)
+from sqlalchemy import select
 
+MAX_WORKERS = 6
 
-def grab_new():
+def process_single_user(userid: str):
+    """
+    worker function executed in parallel
+    processes a single user within an isolated application context thread
+    """
     with app.app_context():
-        stmt = select(PlayerRating.userid).distinct()
-        userids = db.session.execute(stmt).scalars().all()
-        for userid in userids:
-            try:
-                df = fetch_current_ratings(userid)
+        try:
+            df = fetch_current_ratings(userid)
+        except (ShowdownUnavailableError, ShowdownUserError):
+            return userid, False
+        except Exception as e:
+            print(f"[{userid}] Unexpected error during fetch: {e}")
+            return userid, False
 
-            except ShowdownUnavailableError:
-                continue
+        if df.empty:
+            return userid, False
 
-            except ShowdownUserError:
-                continue
+        has_updates = False
 
-            except Exception as e:
-                continue
+        null_placeholder = (
+            db.session.query(PlayerRating)
+            .filter(
+                PlayerRating.userid == userid,
+                (PlayerRating.format.is_(None)) | (PlayerRating.format == "None"),
+            )
+            .first()
+        )
 
-            if df.empty:
-                continue
-            
-            ### Handling NULL placeholders for users without games yet ###
-            null_placeholder = (
+        if null_placeholder:
+            first_real_format = df.iloc[0]
+            null_placeholder.username = first_real_format["username"]
+            null_placeholder.format = first_real_format["format"]
+            null_placeholder.elo = float(first_real_format["elo"])
+            null_placeholder.gxe = float(first_real_format["gxe"])
+            null_placeholder.wins = int(first_real_format["w"])
+            null_placeholder.losses = int(first_real_format["l"])
+            null_placeholder.timestamp = first_real_format["timestamp"]
+            has_updates = True
+
+        for _, row in df.iterrows():
+            fmt = row["format"]
+            new_elo = float(row["elo"])
+            new_gxe = float(row["gxe"])
+            new_wins = int(row["w"])
+            new_losses = int(row["l"])
+
+            latest_row = (
                 db.session.query(PlayerRating)
-                .filter(
-                    PlayerRating.userid == userid,
-                    (PlayerRating.format.is_(None)) | (PlayerRating.format == "None")
-                )
+                .filter_by(userid=userid, format=fmt)
+                .order_by(PlayerRating.timestamp.desc())
                 .first()
             )
 
-            if null_placeholder:
-                first_real_format = df.iloc[0]["format"]
-
-                existing_format_row = (
-                    db.session.query(PlayerRating)
-                    .filter(
-                        PlayerRating.userid == userid,
-                        PlayerRating.format == first_real_format
+            if not latest_row:
+                db.session.add(
+                    PlayerRating(
+                        userid=userid,
+                        username=row["username"],
+                        format=fmt,
+                        elo=new_elo,
+                        gxe=new_gxe,
+                        wins=new_wins,
+                        losses=new_losses,
+                        timestamp=row["timestamp"],
                     )
-                    .first()
                 )
+                has_updates = True
+                continue
 
-                if not existing_format_row:
-                    null_placeholder.format = first_real_format
-                    null_placeholder.username = df.iloc[0]["username"]
+            prev_wins = latest_row.wins or 0
+            prev_losses = latest_row.losses or 0
 
-                db.session.commit()
+            win_diff = max(0, new_wins - prev_wins)
+            loss_diff = max(0, new_losses - prev_losses)
 
-            for _, row in df.iterrows():
-                fmt = row["format"]
-                latest_in_db = (
-                    db.session.query(PlayerRating).filter_by(userid = userid, format = fmt)
-                    .order_by(PlayerRating.timestamp.desc()).first()
-                )
-                new_elo = float(row["elo"])
-                new_wins = int(row["w"])
-                new_losses = int(row["l"])
-                new_gxe = float(row["gxe"])
-
-                if latest_in_db and ((latest_in_db.wins == new_wins and 
-                                     latest_in_db.losses == new_losses) or 
-                                     latest_in_db.gxe == new_gxe):
-                    continue
-
-                prev_wins = latest_in_db.wins if latest_in_db else 0
-                prev_losses = latest_in_db.losses if latest_in_db else 0
-
-                raw_prev_wins = prev_wins
-                raw_prev_losses = prev_losses
-
-                if latest_in_db and (new_wins < latest_in_db.wins):
-                    raw_prev_wins = 0
-
-                if latest_in_db and (new_losses < latest_in_db.losses):
-                    raw_prev_losses = 0
-
-                win_diff = new_wins - raw_prev_wins
-                loss_diff = new_losses - raw_prev_losses
-
-                if win_diff == 0 and loss_diff == 0:
-                    continue
+            if win_diff > 0 or loss_diff > 0:
+                has_updates = True
 
                 for _ in range(win_diff):
-                    db.session.add(MatchHistory(
-                        userid=userid, 
-                        format=fmt, 
-                        indicator='W', 
-                        timestamp=row["timestamp"]
-                    ))
+                    db.session.add(
+                        MatchHistory(
+                            userid=userid,
+                            format=fmt,
+                            indicator="W",
+                            timestamp=row["timestamp"],
+                        )
+                    )
 
                 for _ in range(loss_diff):
-                    db.session.add(MatchHistory(
-                        userid=userid, 
-                        format=fmt, 
-                        indicator='L', 
-                        timestamp=row["timestamp"]
-                    ))
+                    db.session.add(
+                        MatchHistory(
+                            userid=userid,
+                            format=fmt,
+                            indicator="L",
+                            timestamp=row["timestamp"],
+                        )
+                    )
 
                 db.session.flush()
 
-                ### Using MatchHistory table as a 10 game buffer for each users format to calculate last 10 games record ###
                 matches = (
                     db.session.query(MatchHistory)
                     .filter_by(userid=userid, format=fmt)
@@ -126,17 +126,42 @@ def grab_new():
 
                 db.session.add(
                     PlayerRating(
-                        userid = userid,
-                        username = row["username"],
-                        format = fmt,
-                        elo = new_elo,
-                        gxe = new_gxe,
-                        wins = accumulated_wins,
-                        losses = accumulated_losses,
-                        timestamp = row["timestamp"],
+                        userid=userid,
+                        username=row["username"],
+                        format=fmt,
+                        elo=new_elo,
+                        gxe=new_gxe,
+                        wins=accumulated_wins,
+                        losses=accumulated_losses,
+                        timestamp=row["timestamp"],
                     )
                 )
+
         db.session.commit()
+        return userid, has_updates
+
+def grab_new():
+    # fetches all distinct users and processes them concurrently
+    with app.app_context():
+        stmt = select(PlayerRating.userid).distinct()
+        userids = db.session.execute(stmt).scalars().all()
+
+    updated_count = 0
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+        futures = {
+            executor.submit(process_single_user, userid): userid for userid in userids
+        }
+
+        for future in as_completed(futures):
+            uid = futures[future]
+            try:
+                userid, updated = future.result()
+                if updated:
+                    updated_count += 1
+            except Exception as e:
+                print(f"thread failure for user [{uid}]: {e}")
+
+    print(f"Finished checking users. Updated {updated_count}/{len(userids)} users.")
 
 
 if __name__ == "__main__":

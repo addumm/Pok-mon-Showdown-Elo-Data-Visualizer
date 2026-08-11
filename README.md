@@ -1,5 +1,5 @@
 # [showdownstats.com](https://showdownstats.com/)
-![showdownstats](https://github.com/addumm/Pok-mon-Showdown-Elo-Data-Visualizer/blob/main/Screenshot%202026-08-08%20at%209.59.00%E2%80%AFPM.png)
+![showdownstats](https://github.com/addumm/Pok-mon-Showdown-Elo-Data-Visualizer/blob/main/Screenshot%202026-08-10%20at%205.05.35%E2%80%AFPM.png)
 
 
 ## Motivation

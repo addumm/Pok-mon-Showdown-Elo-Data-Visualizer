@@ -1,6 +1,6 @@
 from dash import Dash, Input, Output, dcc, html
 import dash_bootstrap_components as dbc
-from flask import Flask, render_template, request
+from flask import Flask, render_template, request, has_request_context
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_scss import Scss
@@ -11,12 +11,15 @@ import pandas as pd
 import plotly.express as px
 import random
 import re
+from urllib.parse import parse_qs
+
 from showdown_client import (
     ShowdownUnavailableError,
     ShowdownUserError,
     fetch_current_ratings,
     get_sprite_url,
-    replay_search,)
+    replay_search,
+)
 from sqlalchemy import select
 from models import MatchHistory, PlayerRating, ReplayCache, db
 
@@ -47,7 +50,7 @@ limiter = Limiter(
     storage_uri="memory://",
 )
 
-# embedded dash app in flask
+# Embedded Dash app inside Flask
 dash_app = Dash(
     __name__,
     server=app,
@@ -55,10 +58,402 @@ dash_app = Dash(
     external_stylesheets=[dbc.themes.DARKLY],
 )
 
-dash_app.layout = html.Div([html.H2("Select a valid format")])
+# static shell: dcc.Location tracks URL query parameters (?username=xxx&format=yyy)
+dash_app.layout = html.Div(
+    [
+        dcc.Location(id="url", refresh=False),
+        html.Div(id="page-content"),
+    ]
+)
 
 
-### dash async callback for replays ###
+@dash_app.callback(
+    Output("page-content", "children"),
+    Input("url", "search"),
+)
+def render_page_content(search_str):
+    if not search_str:
+        return dbc.Container(
+            [html.H4("Select a valid user and format from the main page.", className="text-muted mt-4")],
+            fluid=True,
+            style={"padding": "20px 30px"},
+        )
+
+    # parse query parameters from the browser iframe URL
+    parsed = parse_qs(search_str.lstrip("?"))
+    current_username = parsed.get("username", [None])[0]
+    selected_format = parsed.get("format", [None])[0]
+
+    if not current_username or not selected_format:
+        return dbc.Container(
+            [html.H4("Select a valid user and format from the main page.", className="text-muted mt-4")],
+            fluid=True,
+            style={"padding": "20px 30px"},
+        )
+
+    user_tz = request.cookies.get("user_tz", "UTC") if has_request_context() else "UTC"
+
+    stmt = (
+        select(
+            PlayerRating.userid,
+            PlayerRating.format,
+            PlayerRating.elo,
+            PlayerRating.gxe,
+            PlayerRating.timestamp,
+            PlayerRating.wins,
+            PlayerRating.losses,
+        )
+        .where(
+            PlayerRating.userid == current_username,
+            PlayerRating.format == selected_format,
+        )
+        .order_by(PlayerRating.timestamp)
+    )
+    plots_df = pd.read_sql(stmt, db.session.connection())
+
+    if not plots_df.empty:
+        plots_df["timestamp"] = pd.to_datetime(plots_df["timestamp"])
+
+        if plots_df["timestamp"].dt.tz is None:
+            plots_df["timestamp"] = plots_df["timestamp"].dt.tz_localize("UTC")
+
+        try:
+            plots_df["timestamp"] = plots_df["timestamp"].dt.tz_convert(user_tz)
+        except Exception:
+            pass
+
+        plots_df["timestamp_str"] = plots_df["timestamp"].dt.strftime("%b %d, %Y %I:%M %p")
+
+        fig = px.line(
+            plots_df,
+            x="timestamp_str",
+            y="elo",
+            title=f"Elo Progression for {selected_format}",
+            template="plotly_dark",
+        )
+
+    teams_stats = dbc.Card(
+        [
+            dbc.CardHeader("Match History & Teams", style={"fontWeight": "600"}),
+            dbc.CardBody(
+                [
+                    dbc.Spinner(
+                        html.Div(id="replays-container"),
+                        color="primary",
+                        type="border",
+                        size="md",
+                    )
+                ],
+                style={"padding": "12px"},
+            ),
+        ],
+        className="h-100",
+    )
+
+    if plots_df.empty or plots_df["format"].empty:
+        fig = px.line(title="No data for this user/format", template="plotly_dark")
+        pie_fig = px.pie(
+            title="No data for this user/format",
+            template="plotly_dark",
+            height=200,
+        )
+        pie_fig.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
+
+        peak_elo = 1000
+        peak_gxe = 0
+        current_elo = 1000
+        current_gxe = 0
+        total_games = 0
+        wins = 0
+        losses = 0
+
+    elif len(plots_df) == 1:
+        plots_df["elo"] = round(plots_df["elo"])
+        plots_df["timestamp"] = plots_df["timestamp"].dt.strftime("%B %d %Y %I:%M %p")
+
+        fig = px.scatter(
+            plots_df,
+            x="timestamp",
+            y="elo",
+            title=f"Elo Progression for {selected_format}",
+            template="plotly_dark",
+        )
+        fig.update_layout(
+            title={
+                "text": f"Elo Progression for {selected_format}",
+                "y": 0.95,
+                "x": 0.5,
+                "xanchor": "center",
+                "yanchor": "top",
+            },
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            font=dict(color="#8c9baf", family="Inter, sans-serif"),
+            xaxis=dict(showticklabels=False, showgrid=False, zeroline=False),
+            yaxis=dict(gridcolor="#2b3346", zeroline=False, dtick=50, tick0=50),
+            margin=dict(l=50, r=30, t=60, b=40),
+            autosize=True,
+        )
+        fig.update_traces(line_color="#6c5ce7", line_width=3)
+
+        latest = plots_df.tail(1)
+        wins = int(latest["wins"].iloc[0])
+        losses = int(latest["losses"].iloc[0])
+        pie_df = pd.DataFrame({"result": ["Wins", "Losses"], "count": [wins, losses]})
+
+        pie_fig = px.pie(
+            pie_df,
+            values="count",
+            names="result",
+            color="result",
+            color_discrete_map={"Wins": "#4CAF50", "Losses": "#E84057"},
+            hole=0.7,
+            template="plotly_dark",
+            height=200,
+        )
+        pie_fig.update_traces(
+            textposition="inside",
+            textinfo="percent",
+            marker=dict(line=dict(color="#1c212e", width=2)),
+            pull=[0, 0],
+            hoverinfo="label+value",
+            textfont={"color": "white", "size": 13},
+        )
+        pie_fig.update_layout(
+            margin=dict(l=20, r=20, t=20, b=20),
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            hoverlabel=dict(font_color="white"),
+            showlegend=True,
+            autosize=True,
+            legend_itemclick=False,
+            legend_itemdoubleclick=False,
+        )
+
+        peak_elo = int(plots_df["elo"].max())
+        peak_gxe = plots_df["gxe"].max()
+        current_elo = int(latest["elo"].iloc[0])
+        current_gxe = float(latest["gxe"].iloc[0])
+        total_games = int(latest["wins"] + latest["losses"].iloc[0])
+
+    else:
+        plots_df["elo"] = round(plots_df["elo"])
+        plots_df["timestamp"] = plots_df["timestamp"].dt.strftime("%B %d %Y %I:%M %p")
+
+        fig = px.line(
+            plots_df,
+            x="timestamp",
+            y="elo",
+            title=f"Elo Progression for {selected_format}",
+            template="plotly_dark",
+        )
+        fig.update_traces(
+            line_color="#6c5ce7",
+            line_width=3,
+            fill="tozeroy",
+            fillcolor="rgba(108, 92, 231, 0.18)",
+        )
+
+        min_elo = max(plots_df["elo"].min() - 50, 900)
+
+        fig.update_layout(
+            title={
+                "text": f"Elo Progression for {selected_format}",
+                "y": 0.95,
+                "x": 0.5,
+                "xanchor": "center",
+                "yanchor": "top",
+            },
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            font=dict(color="#8c9baf", family="Inter, sans-serif"),
+            yaxis=dict(
+                gridcolor="#2b3346",
+                zeroline=False,
+                range=[min_elo, plots_df["elo"].max() + 50],
+            ),
+            margin=dict(l=50, r=30, t=60, b=40),
+            autosize=True,
+        )
+        fig.update_xaxes(
+            type="category",
+            showgrid=False,
+            zeroline=False,
+            showticklabels=False,
+        )
+
+        latest = plots_df.tail(1)
+        wins = int(latest["wins"].iloc[0])
+        losses = int(latest["losses"].iloc[0])
+        pie_df = pd.DataFrame({"result": ["Wins", "Losses"], "count": [wins, losses]})
+
+        pie_fig = px.pie(
+            pie_df,
+            values="count",
+            names="result",
+            color="result",
+            color_discrete_map={"Wins": "#4CAF50", "Losses": "#E84057"},
+            hole=0.7,
+            template="plotly_dark",
+            height=200,
+        )
+
+        pie_fig.update_traces(
+            textposition="inside",
+            textinfo="percent",
+            marker=dict(line=dict(color="#1c212e", width=2)),
+            pull=[0, 0],
+            hoverinfo="label+value",
+            textfont={"color": "white", "size": 13},
+        )
+        pie_fig.update_layout(
+            margin=dict(l=20, r=20, t=20, b=20),
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            hoverlabel=dict(font_color="white"),
+            showlegend=True,
+            autosize=True,
+            legend_itemclick=False,
+            legend_itemdoubleclick=False,
+        )
+
+        peak_elo = int(plots_df["elo"].max())
+        peak_gxe = plots_df["gxe"].max()
+        current_elo = int(latest["elo"].iloc[0])
+        current_gxe = float(latest["gxe"].iloc[0])
+        total_games = int((latest["wins"] + latest["losses"]).iloc[0])
+
+        recent_matches = (
+            db.session.query(MatchHistory.indicator)
+            .filter_by(userid=current_username, format=selected_format)
+            .order_by(MatchHistory.timestamp.desc())
+            .limit(10)
+            .all()
+        )
+        wins = sum(1 for i in recent_matches if i.indicator == "W")
+        losses = sum(1 for i in recent_matches if i.indicator == "L")
+
+    card_stats = dbc.Card(
+        [
+            dbc.CardHeader("Player Statistics"),
+            dbc.CardBody(
+                [
+                    dbc.Row(
+                        [
+                            dbc.Col(
+                                [
+                                    html.Div("Current Elo ", className="stat-label"),
+                                    html.Div(f"{current_elo}", className="stat-value primary-stat"),
+                                ],
+                                width=6,
+                            ),
+                            dbc.Col(
+                                [
+                                    html.Div("Peak Elo ", className="stat-label"),
+                                    html.Div(f"{peak_elo}", className="stat-value"),
+                                ],
+                                width=6,
+                            ),
+                        ],
+                        className="mb-3",
+                    ),
+                    dbc.Row(
+                        [
+                            dbc.Col(
+                                [
+                                    html.Div("Current GXE ", className="stat-label"),
+                                    html.Div(f"{current_gxe}%", className="stat-value primary-stat"),
+                                ],
+                                width=6,
+                            ),
+                            dbc.Col(
+                                [
+                                    html.Div("Peak GXE ", className="stat-label"),
+                                    html.Div(f"{peak_gxe}%", className="stat-value"),
+                                ],
+                                width=6,
+                            ),
+                        ],
+                        className="mb-3",
+                    ),
+                    html.Hr(className="stat-divider"),
+                    dbc.Row(
+                        [
+                            dbc.Col(
+                                [
+                                    html.Div("Recent Games ", className="stat-label"),
+                                    html.Div(
+                                        [
+                                            html.Span(f"{wins}W ", className="badge-win"),
+                                            html.Span(f"{losses}L", className="badge-loss"),
+                                        ]
+                                    ),
+                                ],
+                                width=6,
+                            ),
+                            dbc.Col(
+                                [
+                                    html.Div("Total Games ", className="stat-label"),
+                                    html.Div(f"{total_games}", className="stat-value"),
+                                ],
+                                width=6,
+                            ),
+                        ]
+                    ),
+                ]
+            ),
+        ],
+        className="h-100",
+    )
+
+    card_elo = dbc.Card(
+        [
+            dbc.CardHeader(f"{current_username} — {selected_format} Performance"),
+            dbc.CardBody(
+                [
+                    dcc.Graph(
+                        id="elo-graph",
+                        figure=fig,
+                        config={"displayModeBar": False},
+                    )
+                ]
+            ),
+        ]
+    )
+
+    card_wl = dbc.Card(
+        [
+            dbc.CardHeader("Win / Loss Ratio"),
+            dbc.CardBody(
+                [
+                    dcc.Graph(
+                        id="wl-graph",
+                        figure=pie_fig,
+                        config={"displayModeBar": False},
+                    )
+                ]
+            ),
+        ]
+    )
+
+    return dbc.Container(
+        [
+            dcc.Store(id="store-username", data=current_username),
+            dcc.Store(id="store-format", data=selected_format),
+            dbc.Row([dbc.Col(card_elo, width=12, className="mb-3")]),
+            dbc.Row(
+                [
+                    dbc.Col(card_stats, xs=12, md=4, className="mb-3"),
+                    dbc.Col(card_wl, xs=12, md=4, className="mb-3"),
+                    dbc.Col(teams_stats, xs=12, md=4, className="mb-3"),
+                ],
+                className="g-3",
+            ),
+        ],
+        fluid=True,
+        style={"padding": "20px 30px"},
+    )
+
 @dash_app.callback(
     Output("replays-container", "children"),
     [
@@ -70,7 +465,6 @@ def load_replays_async(current_username, selected_format):
     if not current_username or not selected_format:
         return html.Div("No format selected.")
 
-    # check local cache first
     cached = ReplayCache.query.filter_by(
         userid=current_username, format=selected_format
     ).first()
@@ -82,7 +476,6 @@ def load_replays_async(current_username, selected_format):
         except Exception:
             user_teams = {}
 
-    # if cache miss fetch existing from showdown api and store
     if not user_teams:
         try:
             user_teams = replay_search(current_username, selected_format)
@@ -103,7 +496,6 @@ def load_replays_async(current_username, selected_format):
             print(f"[REPLAY ASYNC ERROR]: {e}")
             user_teams = {}
 
-    # cards for replays/teams
     if user_teams:
         replay_cards = []
         for replay_id, team_species in list(user_teams.items())[:10]:
@@ -179,431 +571,15 @@ def load_replays_async(current_username, selected_format):
             },
         )
 
-
-def set_dash_layout(current_username, selected_format):
-    user_tz = request.cookies.get("user_tz", "UTC")
-    stmt = (
-        select(
-            PlayerRating.userid,
-            PlayerRating.format,
-            PlayerRating.elo,
-            PlayerRating.gxe,
-            PlayerRating.timestamp,
-            PlayerRating.wins,
-            PlayerRating.losses,
-        )
-        .where(
-            PlayerRating.userid == current_username,
-            PlayerRating.format == selected_format,
-        )
-        .order_by(PlayerRating.timestamp)
-    )
-    plots_df = pd.read_sql(stmt, db.session.connection())
-
-    if not plots_df.empty:
-        plots_df["timestamp"] = pd.to_datetime(plots_df["timestamp"])
-        
-        # Localize DB naive timestamp to UTC, then convert to User's Timezone
-        if plots_df["timestamp"].dt.tz is None:
-            plots_df["timestamp"] = plots_df["timestamp"].dt.tz_localize("UTC")
-        
-        try:
-            plots_df["timestamp"] = plots_df["timestamp"].dt.tz_convert(user_tz)
-        except Exception:
-            pass # Fallback to UTC if timezone string is unrecognized
-
-        # Format as string or pass directly to Plotly
-        plots_df["timestamp_str"] = plots_df["timestamp"].dt.strftime("%b %d, %Y %I:%M %p")
-
-        fig = px.line(
-            plots_df,
-            x="timestamp_str",  # Explicit local datetime string
-            y="elo",
-            title=f"Elo Progression for {selected_format}",
-            template="plotly_dark",
-        )
-
-    # replay/history card with loading spinner ---
-    teams_stats = dbc.Card(
-        [
-            dbc.CardHeader(
-                "Match History & Teams", style={"fontWeight": "600"}
-            ),
-            dbc.CardBody(
-                [
-                    dbc.Spinner(
-                        html.Div(id="replays-container"),
-                        color="primary",
-                        type="border",
-                        size="md",
-                    )
-                ],
-                style={"padding": "12px"},
-            ),
-        ],
-        className="h-100",
-    )
-
-    #### HANDLE BRAND NEW ACCOUNTS/'NONE' FORMAT ####
-    if plots_df.empty or plots_df["format"].empty:
-        fig = px.line(
-            title="No data for this user/format", template="plotly_dark"
-        )
-        pie_fig = px.pie(
-            title="No data for this user/format",
-            template="plotly_dark",
-            height=200,
-        )
-        pie_fig.update_layout(
-            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)"
-        )
-
-        peak_elo = 1000
-        peak_gxe = 0
-        current_elo = 1000
-        current_gxe = 0
-        total_games = 0
-        wins = 0
-        losses = 0
-
-    elif len(plots_df) == 1:
-        plots_df["elo"] = round(plots_df["elo"])
-        plots_df["timestamp"] = plots_df["timestamp"].dt.strftime(
-            "%B %d %Y %I:%M %p"
-        )
-
-        fig = px.scatter(
-            plots_df,
-            x="timestamp",
-            y="elo",
-            title=f"Elo Progression for {selected_format}",
-            template="plotly_dark",
-        )
-        fig.update_layout(
-            title={
-                "text": f"Elo Progression for {selected_format}",
-                "y": 0.95,
-                "x": 0.5,
-                "xanchor": "center",
-                "yanchor": "top",
-            },
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)",
-            font=dict(color="#8c9baf", family="Inter, sans-serif"),
-            xaxis=dict(showticklabels=False, showgrid=False, zeroline=False),
-            yaxis=dict(gridcolor="#2b3346", zeroline=False, dtick=50, tick0=50),
-            margin=dict(l=50, r=30, t=60, b=40),
-            autosize=True,
-        )
-        fig.update_traces(line_color="#6c5ce7", line_width=3)
-
-        latest = plots_df.tail(1)
-        wins = int(latest["wins"].iloc[0])
-        losses = int(latest["losses"].iloc[0])
-        pie_df = pd.DataFrame(
-            {"result": ["Wins", "Losses"], "count": [wins, losses]}
-        )
-
-        pie_fig = px.pie(
-            pie_df,
-            values="count",
-            names="result",
-            color="result",
-            color_discrete_map={"Wins": "#4CAF50", "Losses": "#E84057"},
-            hole=0.7,
-            template="plotly_dark",
-            height=200,
-        )
-        pie_fig.update_traces(
-            textposition="inside",
-            textinfo="percent",
-            marker=dict(line=dict(color="#1c212e", width=2)),
-            pull=[0, 0],
-            hoverinfo="label+value",
-            textfont={"color": "white", "size": 13},
-        )
-        pie_fig.update_layout(
-            margin=dict(l=20, r=20, t=20, b=20),
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)",
-            hoverlabel=dict(font_color="white"),
-            showlegend=True,
-            autosize=True,
-            legend_itemclick=False,
-            legend_itemdoubleclick=False,
-        )
-
-        peak_elo = int(plots_df["elo"].max())
-        peak_gxe = plots_df["gxe"].max()
-        current_elo = int(latest["elo"].iloc[0])
-        current_gxe = float(latest["gxe"].iloc[0])
-        total_games = int(latest["wins"] + latest["losses"].iloc[0])
-
-    else:
-        plots_df["elo"] = round(plots_df["elo"])
-        plots_df["timestamp"] = plots_df["timestamp"].dt.strftime(
-            "%B %d %Y %I:%M %p"
-        )
-
-        fig = px.line(
-            plots_df,
-            x="timestamp",
-            y="elo",
-            title=f"Elo Progression for {selected_format}",
-            template="plotly_dark",
-        )
-        fig.update_traces(
-        line_color="#6c5ce7",
-        line_width=3,
-        fill="tozeroy",
-        fillcolor="rgba(108, 92, 231, 0.18)",
-        )
-
-        min_elo = max(plots_df["elo"].min() - 50, 900)
-
-        fig.update_layout(
-            title={
-                "text": f"Elo Progression for {selected_format}",
-                "y": 0.95,
-                "x": 0.5,
-                "xanchor": "center",
-                "yanchor": "top",
-            },
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)",
-            font=dict(color="#8c9baf", family="Inter, sans-serif"),
-            yaxis=dict(
-                gridcolor="#2b3346",
-                zeroline=False,
-                range=[min_elo, plots_df["elo"].max() + 50],
-            ),
-            margin=dict(l=50, r=30, t=60, b=40),
-            autosize=True,
-        )
-        fig.update_xaxes(
-        type="category",
-        showgrid=False,
-        zeroline=False,
-        showticklabels=False,
-        )
-
-        latest = plots_df.tail(1)
-        wins = int(latest["wins"].iloc[0])
-        losses = int(latest["losses"].iloc[0])
-        pie_df = pd.DataFrame(
-            {"result": ["Wins", "Losses"], "count": [wins, losses]}
-        )
-
-        pie_fig = px.pie(
-            pie_df,
-            values="count",
-            names="result",
-            color="result",
-            color_discrete_map={"Wins": "#4CAF50", "Losses": "#E84057"},
-            hole=0.7,
-            template="plotly_dark",
-            height=200,
-        )
-
-        pie_fig.update_traces(
-            textposition="inside",
-            textinfo="percent",
-            marker=dict(line=dict(color="#1c212e", width=2)),
-            pull=[0, 0],
-            hoverinfo="label+value",
-            textfont={"color": "white", "size": 13},
-        )
-        pie_fig.update_layout(
-            margin=dict(l=20, r=20, t=20, b=20),
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)",
-            hoverlabel=dict(font_color="white"),
-            showlegend=True,
-            autosize=True,
-            legend_itemclick=False,
-            legend_itemdoubleclick=False,
-        )
-
-        
-        peak_elo = int(plots_df["elo"].max())
-        peak_gxe = plots_df["gxe"].max()
-        current_elo = int(latest["elo"].iloc[0])
-        current_gxe = float(latest["gxe"].iloc[0])
-        total_games = int((latest["wins"] + latest["losses"]).iloc[0])
-
-        recent_matches = (
-            db.session.query(MatchHistory.indicator)
-            .filter_by(userid=current_username, format=selected_format)
-            .order_by(MatchHistory.timestamp.desc())
-            .limit(10)
-            .all()
-        )
-        wins = sum(1 for i in recent_matches if i.indicator == "W")
-        losses = sum(1 for i in recent_matches if i.indicator == "L")
-
-    card_stats = dbc.Card(
-        [
-            dbc.CardHeader("Player Statistics"),
-            dbc.CardBody(
-                [dbc.Row(
-                        [
-                            dbc.Col(
-                                [
-                                    html.Div(
-                                        "Current Elo ", className="stat-label"
-                                    ),
-                                    html.Div(
-                                        f"{current_elo}",
-                                        className="stat-value primary-stat",
-                                    ),
-                                ],
-                                width=6,
-                            ),
-                            dbc.Col(
-                                [
-                                    html.Div(
-                                        "Peak Elo ", className="stat-label"
-                                    ),
-                                    html.Div(
-                                        f"{peak_elo}", className="stat-value"
-                                    ),
-                                ],
-                                width=6,
-                            ),
-                        ],
-                        className="mb-3",
-                    ),
-                    dbc.Row(
-                        [
-                            dbc.Col(
-                                [
-                                    html.Div(
-                                        "Current GXE ", className="stat-label"
-                                    ),
-                                    html.Div(
-                                        f"{current_gxe}%",
-                                        className="stat-value primary-stat",
-                                    ),
-                                ],
-                                width=6,
-                            ),
-                            dbc.Col(
-                                [
-                                    html.Div(
-                                        "Peak GXE ", className="stat-label"
-                                    ),
-                                    html.Div(
-                                        f"{peak_gxe}%", className="stat-value"
-                                    ),
-                                ],
-                                width=6,
-                            ),
-                        ],
-                        className="mb-3",
-                    ),
-                    html.Hr(className="stat-divider"),
-                    dbc.Row(
-                        [
-                            dbc.Col(
-                                [
-                                    html.Div(
-                                        "Recent Games ", className="stat-label"
-                                    ),
-                                    html.Div(
-                                        [
-                                            html.Span(
-                                                f"{wins}W ",
-                                                className="badge-win",
-                                            ),
-                                            html.Span(
-                                                f"{losses}L",
-                                                className="badge-loss",
-                                            ),
-                                        ]
-                                    ),
-                                ],
-                                width=6,
-                            ),
-                            dbc.Col(
-                                [
-                                    html.Div(
-                                        "Total Games ", className="stat-label"
-                                    ),
-                                    html.Div(
-                                        f"{total_games}", className="stat-value"
-                                    ),
-                                ],
-                                width=6,
-                            ),
-                        ]
-                    ),
-                ]
-            ),
-        ],
-        className="h-100",
-    )
-
-    card_elo = dbc.Card(
-        [
-            dbc.CardHeader(
-                f"{current_username} — {selected_format} Performance"
-            ),
-            dbc.CardBody(
-                [
-                    dcc.Graph(
-                        id="elo-graph",
-                        figure=fig,
-                        config={"displayModeBar": False},
-                    )
-                ]
-            ),
-        ]
-    )
-
-    card_wl = dbc.Card(
-        [
-            dbc.CardHeader("Win / Loss Ratio"),
-            dbc.CardBody(
-                [
-                    dcc.Graph(
-                        id="wl-graph",
-                        figure=pie_fig,
-                        config={"displayModeBar": False},
-                    )
-                ]
-            ),
-        ]
-    )
-
-
-    dash_app.layout = dbc.Container(
-        [
-            # hidden state stores to pass metadata to async callback
-            dcc.Store(id="store-username", data=current_username),
-            dcc.Store(id="store-format", data=selected_format),
-            dbc.Row([dbc.Col(card_elo, width=12, className="mb-3")]),
-            dbc.Row(
-                [
-                    dbc.Col(card_stats, xs=12, md=4, className="mb-3"),
-                    dbc.Col(card_wl, xs=12, md=4, className="mb-3"),
-                    dbc.Col(teams_stats, xs=12, md=4, className="mb-3"),
-                ],
-                className="g-3",
-            ),
-        ],
-        fluid=True,
-        style={"padding": "20px 30px"},
-    )
-
 # Page
 @app.route("/", methods=["GET", "POST"])
-@limiter.limit(
-    "5 per minute"
-)
+@limiter.limit("5 per minute")
 def index():
     formats = []
     current_username = None
     error_message = None
+    selected_format = None
+    dash_url = None
     random_pokemon_id = random.randint(1, 1025)
 
     if request.method == "POST":
@@ -673,8 +649,10 @@ def index():
         if not selected_format and formats:
             selected_format = formats[0]
 
-        if selected_format:
-            set_dash_layout(current_username, selected_format)
+        if not selected_format:
+            selected_format = "None"
+
+        dash_url = f"/elo/?username={current_username}&format={selected_format}"
 
         return render_template(
             "index.html",
@@ -682,6 +660,7 @@ def index():
             formats=formats,
             error_message=None,
             selected_format=selected_format,
+            dash_url=dash_url,
             header_sprite_id=random_pokemon_id,
         )
 

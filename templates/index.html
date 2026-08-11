@@ -60,13 +60,13 @@
         </div>
     {% endif %}
 
-    {% if current_username and formats %}
-    <main style="padding: 20px 0;">
-        <iframe
-            src="/elo/"
-            style="width: 100%; min-height: 900px; border: none; overflow: hidden;">
-        </iframe>
-    </main>
+    {% if dash_url %}
+        <main style="padding: 20px 0;">
+            <iframe
+                src="{{ dash_url }}"
+                style="width: 100%; min-height: 900px; border: none; overflow: hidden;">
+            </iframe>
+        </main>
     {% endif %}
 </body>
 </html>

@@ -125,33 +125,6 @@ def render_page_content(search_str):
 
         plots_df["timestamp_str"] = plots_df["timestamp"].dt.strftime("%b %d, %Y %I:%M %p")
 
-        fig = px.line(
-            plots_df,
-            x="timestamp_str",
-            y="elo",
-            title=f"Elo Progression for {selected_format}",
-            template="plotly_dark",
-        )
-
-    ### teams/match history card ###
-    teams_stats = dbc.Card(
-        [
-            dbc.CardHeader("Match History & Teams", style={"fontWeight": "600"}),
-            dbc.CardBody(
-                [
-                    dbc.Spinner(
-                        html.Div(id="replays-container"),
-                        color="primary",
-                        type="border",
-                        size="md",
-                    )
-                ],
-                style={"padding": "12px"},
-            ),
-        ],
-        className="h-100",
-    )
-
     # if no data in plots_df
     if plots_df.empty or plots_df["format"].empty:
         fig = px.line(title="No data for this user/format", template="plotly_dark")
@@ -170,6 +143,7 @@ def render_page_content(search_str):
         wins = 0
         losses = 0
 
+    # if 1 data point
     elif len(plots_df) == 1:
         plots_df["elo"] = round(plots_df["elo"])
         plots_df["timestamp"] = plots_df["timestamp"].dt.strftime("%B %d %Y %I:%M %p")
@@ -239,7 +213,7 @@ def render_page_content(search_str):
         current_gxe = float(latest["gxe"].iloc[0])
         total_games = int(latest["wins"] + latest["losses"].iloc[0])
 
-    # constructing full plot
+    # constructing plots for existing users w/ >1 data point 
     else:
         plots_df["elo"] = round(plots_df["elo"])
         plots_df["timestamp"] = plots_df["timestamp"].dt.strftime("%B %d %Y %I:%M %p")
@@ -336,6 +310,25 @@ def render_page_content(search_str):
         )
         wins = sum(1 for i in recent_matches if i.indicator == "W")
         losses = sum(1 for i in recent_matches if i.indicator == "L")
+
+    ### teams/match history card ###
+    teams_stats = dbc.Card(
+        [
+            dbc.CardHeader("Match History & Teams", style={"fontWeight": "600"}),
+            dbc.CardBody(
+                [
+                    dbc.Spinner(
+                        html.Div(id="replays-container"),
+                        color="primary",
+                        type="border",
+                        size="md",
+                    )
+                ],
+                style={"padding": "12px"},
+            ),
+        ],
+        className="h-100",
+    )
 
     # cards for player stats
     card_stats = dbc.Card(
@@ -504,7 +497,7 @@ def load_replays_async(current_username, selected_format):
 
     if user_teams:
         replay_cards = []
-        for replay_id, team_species in list(user_teams.items())[:10]:
+        for replay_id, team_species in list(user_teams.items())[:10]: ## can adjust to desired number of teams/replays shown
             replay_url = f"https://replay.pokemonshowdown.com/{replay_id}"
 
             sprite_imgs = [
@@ -678,7 +671,7 @@ def index():
             error_message=None,
             header_sprite_id=random_pokemon_id,
         )
-    
+# for export data to csv button
 @app.route("/export/<username>", methods=["GET"])
 @limiter.limit("10 per minute")
 def export_user_csv(username):

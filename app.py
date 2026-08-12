@@ -1,6 +1,6 @@
 from dash import Dash, Input, Output, dcc, html
 import dash_bootstrap_components as dbc
-from flask import Flask, render_template, request, has_request_context
+from flask import Flask, render_template, request, has_request_context, Response, make_response, redirect, url_for
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_scss import Scss
@@ -12,6 +12,7 @@ import plotly.express as px
 import random
 import re
 from urllib.parse import parse_qs
+from io import StringIO
 
 from showdown_client import (
     ShowdownUnavailableError,
@@ -50,7 +51,7 @@ limiter = Limiter(
     storage_uri="memory://",
 )
 
-# Embedded Dash app inside Flask
+# embedded Dash app inside Flask
 dash_app = Dash(
     __name__,
     server=app,
@@ -65,7 +66,6 @@ dash_app.layout = html.Div(
         html.Div(id="page-content"),
     ]
 )
-
 
 @dash_app.callback(
     Output("page-content", "children"),
@@ -90,7 +90,7 @@ def render_page_content(search_str):
             fluid=True,
             style={"padding": "20px 30px"},
         )
-
+    # cookie for user timezone
     user_tz = request.cookies.get("user_tz", "UTC") if has_request_context() else "UTC"
 
     stmt = (
@@ -111,6 +111,7 @@ def render_page_content(search_str):
     )
     plots_df = pd.read_sql(stmt, db.session.connection())
 
+    ### if there is data in plots_df, format time and prep the plot with correct time ###
     if not plots_df.empty:
         plots_df["timestamp"] = pd.to_datetime(plots_df["timestamp"])
 
@@ -132,6 +133,7 @@ def render_page_content(search_str):
             template="plotly_dark",
         )
 
+    ### teams/match history card ###
     teams_stats = dbc.Card(
         [
             dbc.CardHeader("Match History & Teams", style={"fontWeight": "600"}),
@@ -150,6 +152,7 @@ def render_page_content(search_str):
         className="h-100",
     )
 
+    # if no data in plots_df
     if plots_df.empty or plots_df["format"].empty:
         fig = px.line(title="No data for this user/format", template="plotly_dark")
         pie_fig = px.pie(
@@ -236,6 +239,7 @@ def render_page_content(search_str):
         current_gxe = float(latest["gxe"].iloc[0])
         total_games = int(latest["wins"] + latest["losses"].iloc[0])
 
+    # constructing full plot
     else:
         plots_df["elo"] = round(plots_df["elo"])
         plots_df["timestamp"] = plots_df["timestamp"].dt.strftime("%B %d %Y %I:%M %p")
@@ -333,6 +337,7 @@ def render_page_content(search_str):
         wins = sum(1 for i in recent_matches if i.indicator == "W")
         losses = sum(1 for i in recent_matches if i.indicator == "L")
 
+    # cards for player stats
     card_stats = dbc.Card(
         [
             dbc.CardHeader("Player Statistics"),
@@ -461,6 +466,7 @@ def render_page_content(search_str):
         Input("store-format", "data"),
     ],
 )
+# replay & team caching
 def load_replays_async(current_username, selected_format):
     if not current_username or not selected_format:
         return html.Div("No format selected.")
@@ -672,6 +678,46 @@ def index():
             error_message=None,
             header_sprite_id=random_pokemon_id,
         )
+    
+@app.route("/export/<username>", methods=["GET"])
+@limiter.limit("10 per minute")
+def export_user_csv(username):
+    clean_username = re.sub(r"[^a-zA-Z0-9]", "", username.strip().lower())
+
+    stmt = (
+        select(
+            PlayerRating.format,
+            PlayerRating.elo,
+            PlayerRating.gxe,
+            PlayerRating.wins,
+            PlayerRating.losses,
+            PlayerRating.timestamp,
+        )
+        .where(PlayerRating.userid == clean_username)
+        .order_by(PlayerRating.timestamp.asc())
+    )
+
+    df = pd.read_sql(stmt, db.session.connection())
+
+    if df.empty:
+        return "No data found for this user.", 404
+
+    # timestamp formatting spreadsheet readability
+    df["timestamp"] = pd.to_datetime(df["timestamp"]).dt.strftime(
+        "%Y-%m-%d %H:%M:%S"
+    )
+
+    # output directly to memory buffer (no temp file saved on server)
+    output = StringIO()
+    df.to_csv(output, index=False)
+
+    response = make_response(output.getvalue())
+    response.headers["Content-Disposition"] = (
+        f"attachment; filename={clean_username}_showdown_stats.csv"
+    )
+    response.headers["Content-Type"] = "text/csv"
+
+    return response
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8000, debug=True)

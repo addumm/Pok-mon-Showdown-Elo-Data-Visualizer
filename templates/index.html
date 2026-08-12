@@ -29,27 +29,58 @@
                     alt="Pokemon Sprite"
                     style="width: 38px; height: 38px; object-fit: contain; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.4));"
                 />
-                <h2 style="margin: 0; font-size: 1.2rem; font-weight: 700; color: #fff; whitespace: nowrap;">
+                <h2 style="margin: 0; font-size: 1.2rem; font-weight: 700; color: #fff; white-space: nowrap; font-family: 'Inter', sans-serif;">
                     PS! Stats
                 </h2>
             </div>
-            <form method="POST" action="" style="display: flex; gap: 10px; width: 100%;">
-                <input type="text" name="username" placeholder="Enter Showdown User" id="username" value="{{ current_username or '' }}"/>
+    
+            <form method="POST" action="" style="display: flex; gap: 10px; width: 100%; align-items: center;">
+                <input 
+                    type="text" 
+                    name="username" 
+                    placeholder="Enter Showdown User" 
+                    id="username" 
+                    value="{{ current_username or '' }}"
+                    style="font-family: 'Inter', sans-serif; font-size: 0.9rem; font-weight: 400; padding: 8px 12px; border-radius: 6px; border: 1px solid #2b3346; background: #121621; color: #fff; box-sizing: border-box;"
+                />
                 
                 {% if formats %}
-                <select name="format" id="format">
+                <select 
+                    name="format" 
+                    id="format"
+                    style="font-family: 'Inter', sans-serif; font-size: 0.9rem; font-weight: 400; padding: 8px 12px; border-radius: 6px; border: 1px solid #2b3346; background: #121621; color: #fff; box-sizing: border-box; cursor: pointer;"
+                >
                     <option value="" {% if not selected_format %}selected{% endif %}>Select Format</option>
                     {% for fmt in formats %}
                     <option value="{{ fmt }}" {% if fmt == selected_format %}selected{% endif %}>{{ fmt }}</option>
                     {% endfor %}
                 </select>
                 {% else %}
-                <select name="format" id="format" disabled>
+                <select 
+                    name="format" 
+                    id="format" 
+                    disabled
+                    style="font-family: 'Inter', sans-serif; font-size: 0.9rem; font-weight: 400; padding: 8px 12px; border-radius: 6px; border: 1px solid #2b3346; background: #121621; color: #8c9baf; box-sizing: border-box;"
+                >
                     <option value="">Format</option>
                 </select>
                 {% endif %}
-
-                <input type="submit" value="Search" id="btn_add">
+    
+                <input 
+                    type="submit" 
+                    value="Search" 
+                    id="btn_add"
+                    style="font-family: 'Inter', sans-serif; font-size: 0.9rem; font-weight: 600; padding: 8px 16px; border-radius: 6px; border: none; background: #6c5ce7; color: #fff; cursor: pointer; transition: background 0.2s ease;"
+                />
+    
+                {% if current_username %}
+                <a 
+                    href="{{ url_for('export_user_csv', username=current_username) }}" 
+                    style="font-family: 'Inter', sans-serif; font-size: 0.9rem; font-weight: 600; padding: 8px 16px; border-radius: 6px; border: 1px solid #6c5ce7; background: transparent; color: #6c5ce7; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; transition: all 0.2s ease;"
+                >
+                    📊 Export to CSV
+                </a>
+                {% endif %}
             </form>
         </div>
     </header>

@@ -17,7 +17,6 @@ from replay_parser import fetch_stats_concurrently
 import pytz
 from datetime import datetime
 from collections import defaultdict
-
 from showdown_client import (
     ShowdownUnavailableError,
     ShowdownUserError,
@@ -163,10 +162,11 @@ def render_page_content(search_str):
             title=f"Elo Progression — {selected_format}",
             template="plotly_dark",
         )
-        fig.update_traces(marker=dict(color="#6c5ce7", size=10))
+        fig.update_traces(marker=dict(color="#6c5ce7", size=10), 
+                          hovertemplate="<b>Date:</b> %{x|%b %d, %Y %I:%M %p}<br><b>Elo:</b> %{y}<extra></extra>",)
         fig.update_layout(
             **plotly_layout_defaults,
-            xaxis=dict(showticklabels=False, showgrid=False, zeroline=False),
+            xaxis=dict(showticklabels=False, showgrid=False, zeroline=False, hoverformat="%b %d, %Y %I:%M %p"),
             yaxis=dict(gridcolor="rgba(255, 255, 255, 0.08)", zeroline=False, dtick=50),
         )
 
@@ -214,6 +214,7 @@ def render_page_content(search_str):
             line_width=3,
             fill="tozeroy",
             fillcolor="rgba(108, 92, 231, 0.15)",
+            hovertemplate="<b>Date:</b> %{x|%b %d, %Y %I:%M %p}<br><b>Elo:</b> %{y}<extra></extra>",
         )
 
         min_elo = max(plots_df["elo"].min() - 50, 900)
@@ -223,6 +224,7 @@ def render_page_content(search_str):
                 gridcolor="rgba(255, 255, 255, 0.08)",
                 zeroline=False,
                 range=[min_elo, plots_df["elo"].max() + 50],
+                hoverformat="%b %d, %Y %I:%M %p",
             ),
         )
         fig.update_xaxes(type="category", showgrid=False, zeroline=False, showticklabels=False)
@@ -330,54 +332,6 @@ def render_page_content(search_str):
         className="card h-100",
     )
 
-    mvp_mon = "N/A"
-
-    cache_row = (
-        db.session.query(ReplayCache.teams_json)
-        .filter(
-            ReplayCache.userid == current_username,
-            ReplayCache.format == selected_format,
-        )
-        .order_by(ReplayCache.updated_at.desc())
-        .first()
-    )
-
-    if cache_row and cache_row.teams_json:
-        teams_dict = cache_row.teams_json
-        if isinstance(teams_dict, str):
-            try:
-                teams_dict = json.loads(teams_dict)
-            except Exception:
-                teams_dict = {}
-
-        if teams_dict:
-            target_replays = list(teams_dict.keys())[:10]
-
-            mon_brought_counts = defaultdict(int)
-            for r_id in target_replays:
-                pokemon_list = teams_dict.get(r_id, [])
-                for mon in pokemon_list:
-                    mon_brought_counts[mon] += 1
-
-            if mon_brought_counts:
-                # find replay stats only for tiebreaking move counts
-                stats_map = fetch_stats_concurrently(target_replays, current_username, max_workers=5)
-                mon_move_counts = defaultdict(int)
-
-                for r_id in target_replays:
-                    r_stats = stats_map.get(r_id)
-                    if r_stats:
-                        for mon, move_count in r_stats.get("moves_used", {}).items():
-                            mon_move_counts[mon] += move_count
-
-                # sort primarily by brought count, secondary by total moves used
-                sorted_mons = sorted(
-                    mon_brought_counts.keys(),
-                    key=lambda mon: (mon_brought_counts[mon], mon_move_counts.get(mon, 0)),
-                    reverse=True,
-                )
-                mvp_mon = sorted_mons[0]
-
     card_stats = dbc.Card(
     [
         dbc.CardHeader("Player Statistics"),
@@ -454,12 +408,15 @@ def render_page_content(search_str):
                         dbc.Col(
                             [
                                 html.Div("MVP (Last 10)", className="stat-label"),
-                                html.Div(
-                                    html.Span(
-                                        f"{mvp_mon}",
+                                dcc.Loading(
+                                    id="loading-mvp",
+                                    type="circle",
+                                    color="#6c5ce7",
+                                    children=html.Div(
+                                        id="mvp-mon-output",
                                         className="format-tag",
-                                        style={"fontWeight": "600", "color": "#f1f2f6"},
-                                    )
+                                        style={"fontWeight": "600", "color": "#f1f2f6", "display": "inline-block"},
+                                    ),
                                 ),
                             ],
                             width=6,
@@ -580,6 +537,69 @@ def render_page_content(search_str):
         fluid=True,
         style={"maxWidth": "1280px", "margin": "0 auto", "padding": "20px"},
     )
+
+# for mvp mon...
+@dash_app.callback(
+    Output("mvp-mon-output", "children"),
+    [
+        Input("store-username", "data"),
+        Input("store-format", "data"),
+    ],
+)
+def load_mvp_async(current_username, selected_format):
+    if not current_username or not selected_format:
+        return "N/A"
+
+    cache_row = (
+        db.session.query(ReplayCache.teams_json)
+        .filter(
+            ReplayCache.userid == current_username,
+            ReplayCache.format == selected_format,
+        )
+        .order_by(ReplayCache.updated_at.desc())
+        .first()
+    )
+
+    if not cache_row or not cache_row.teams_json:
+        return "N/A"
+
+    teams_dict = cache_row.teams_json
+    if isinstance(teams_dict, str):
+        try:
+            teams_dict = json.loads(teams_dict)
+        except Exception:
+            teams_dict = {}
+
+    if not teams_dict:
+        return "N/A"
+
+    target_replays = list(teams_dict.keys())[:10]
+
+    mon_brought_counts = defaultdict(int)
+    for r_id in target_replays:
+        pokemon_list = teams_dict.get(r_id, [])
+        for mon in pokemon_list:
+            mon_brought_counts[mon] += 1
+
+    if not mon_brought_counts:
+        return "N/A"
+
+    stats_map = fetch_stats_concurrently(target_replays, current_username, max_workers=5)
+    mon_move_counts = defaultdict(int)
+
+    for r_id in target_replays:
+        r_stats = stats_map.get(r_id)
+        if r_stats:
+            for mon, move_count in r_stats.get("moves_used", {}).items():
+                mon_move_counts[mon] += move_count
+
+    sorted_mons = sorted(
+        mon_brought_counts.keys(),
+        key=lambda mon: (mon_brought_counts[mon], mon_move_counts.get(mon, 0)),
+        reverse=True,
+    )
+
+    return sorted_mons[0] if sorted_mons else "N/A"
 
 @dash_app.callback(
     Output("replays-container", "children"),

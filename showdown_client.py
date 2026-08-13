@@ -190,3 +190,36 @@ def get_sprite_url(species: str) -> str:
         pokemon_id = raw_clean
 
     return f"https://play.pokemonshowdown.com/sprites/gen5/{pokemon_id}.png"
+
+def calculate_streaks(indicators: list[str]) -> tuple[int, str]:
+    """
+    Given a list of match indicators ('W' or 'L') in chronological order:
+    Returns (longest_win_streak, current_streak_str)
+    Example return: (7, "3W") or (5, "2L")
+    """
+    if not indicators:
+        return 0, "N/A"
+
+    longest_win_streak = 0
+    current_win_streak = 0
+    
+    # calculate longest win streak (chronological order)
+    for ind in indicators:
+        if ind == "W":
+            current_win_streak += 1
+            if current_win_streak > longest_win_streak:
+                longest_win_streak = current_win_streak
+        else:
+            current_win_streak = 0
+
+    # calculate current active streak from the most recent match
+    latest = indicators[-1]
+    count = 0
+    for ind in reversed(indicators):
+        if ind == latest:
+            count += 1
+        else:
+            break
+
+    current_streak_str = f"{count}{latest}"
+    return longest_win_streak, current_streak_str

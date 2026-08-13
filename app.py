@@ -14,6 +14,9 @@ import re
 from urllib.parse import parse_qs
 from io import StringIO
 from replay_parser import fetch_stats_concurrently
+import pytz
+from datetime import datetime
+from collections import defaultdict
 
 from showdown_client import (
     ShowdownUnavailableError,
@@ -21,6 +24,7 @@ from showdown_client import (
     fetch_current_ratings,
     get_sprite_url,
     replay_search,
+    calculate_streaks
 )
 from sqlalchemy import select
 from models import MatchHistory, PlayerRating, ReplayCache, db
@@ -262,6 +266,51 @@ def render_page_content(search_str):
         wins = sum(1 for i in recent_matches if i.indicator == "W")
         losses = sum(1 for i in recent_matches if i.indicator == "L")
 
+    all_matches = (
+        db.session.query(MatchHistory.indicator)
+        .filter_by(userid=current_username, format=selected_format)
+        .order_by(MatchHistory.timestamp.asc())
+        .all()
+    )
+    match_indicators = [m.indicator for m in all_matches]
+    longest_streak, current_streak = calculate_streaks(match_indicators)
+
+    try:
+        local_tz = pytz.timezone(user_tz)
+    except Exception:
+        local_tz = pytz.utc
+
+    # get local time now and set to midnight (00:00:00)
+    local_now = datetime.now(local_tz)
+    local_midnight = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    # convert local midnight to utc for database querying
+    utc_midnight = local_midnight.astimezone(pytz.utc)
+
+    # find the last rating recorded before local midnight today
+    start_of_day_rating = (
+        db.session.query(PlayerRating.elo)
+        .filter(
+            PlayerRating.userid == current_username,
+            PlayerRating.format == selected_format,
+            PlayerRating.timestamp < utc_midnight,
+        )
+        .order_by(PlayerRating.timestamp.desc())
+        .first()
+    )
+
+    if start_of_day_rating and start_of_day_rating.elo:
+        today_diff = int(round(current_elo - start_of_day_rating.elo))
+        if today_diff > 0:
+            today_diff_str = f"+{today_diff}"
+        elif today_diff < 0:
+            today_diff_str = f"{today_diff}"
+        else:
+            today_diff_str = "0"
+    else:
+        # if no games played before today, compare against initial entry of the day or show 0
+        today_diff_str = "0"
+
     # --- CARDS WITH MATCHING CSS CLASSES ---
     teams_stats = dbc.Card(
         [
@@ -281,79 +330,195 @@ def render_page_content(search_str):
         className="card h-100",
     )
 
-    card_stats = dbc.Card(
-        [
-            dbc.CardHeader("Player Statistics"),
-            dbc.CardBody(
-                [
-                    dbc.Row(
-                        [
-                            dbc.Col(
-                                [
-                                    html.Div("Current Elo", className="stat-label"),
-                                    html.Div(f"{current_elo}", className="stat-value primary-stat"),
-                                ],
-                                width=6,
-                            ),
-                            dbc.Col(
-                                [
-                                    html.Div("Peak Elo", className="stat-label"),
-                                    html.Div(f"{peak_elo}", className="stat-value"),
-                                ],
-                                width=6,
-                            ),
-                        ],
-                        className="mb-3",
-                    ),
-                    dbc.Row(
-                        [
-                            dbc.Col(
-                                [
-                                    html.Div("Current GXE", className="stat-label"),
-                                    html.Div(f"{current_gxe}%", className="stat-value primary-stat"),
-                                ],
-                                width=6,
-                            ),
-                            dbc.Col(
-                                [
-                                    html.Div("Peak GXE", className="stat-label"),
-                                    html.Div(f"{peak_gxe}%", className="stat-value"),
-                                ],
-                                width=6,
-                            ),
-                        ],
-                        className="mb-3",
-                    ),
-                    html.Hr(style={"borderColor": "rgba(255, 255, 255, 0.08)", "margin": "16px 0"}),
-                    dbc.Row(
-                        [
-                            dbc.Col(
-                                [
-                                    html.Div("Recent Games", className="stat-label"),
-                                    html.Div(
-                                        [
-                                            html.Span(f"{wins}W ", className="badge-win"),
-                                            html.Span(f"{losses}L", className="badge-loss"),
-                                        ]
-                                    ),
-                                ],
-                                width=6,
-                            ),
-                            dbc.Col(
-                                [
-                                    html.Div("Total Games", className="stat-label"),
-                                    html.Div(f"{total_games}", className="stat-value"),
-                                ],
-                                width=6,
-                            ),
-                        ]
-                    ),
-                ],
-                style={"padding": "20px"},
-            ),
-        ],
-        className="card h-100",
+    mvp_mon = "N/A"
+
+    cache_row = (
+        db.session.query(ReplayCache.teams_json)
+        .filter(
+            ReplayCache.userid == current_username,
+            ReplayCache.format == selected_format,
+        )
+        .order_by(ReplayCache.updated_at.desc())
+        .first()
     )
+
+    if cache_row and cache_row.teams_json:
+        teams_dict = cache_row.teams_json
+        if isinstance(teams_dict, str):
+            try:
+                teams_dict = json.loads(teams_dict)
+            except Exception:
+                teams_dict = {}
+
+        if teams_dict:
+            target_replays = list(teams_dict.keys())[:10]
+
+            mon_brought_counts = defaultdict(int)
+            for r_id in target_replays:
+                pokemon_list = teams_dict.get(r_id, [])
+                for mon in pokemon_list:
+                    mon_brought_counts[mon] += 1
+
+            if mon_brought_counts:
+                # find replay stats only for tiebreaking move counts
+                stats_map = fetch_stats_concurrently(target_replays, current_username, max_workers=5)
+                mon_move_counts = defaultdict(int)
+
+                for r_id in target_replays:
+                    r_stats = stats_map.get(r_id)
+                    if r_stats:
+                        for mon, move_count in r_stats.get("moves_used", {}).items():
+                            mon_move_counts[mon] += move_count
+
+                # sort primarily by brought count, secondary by total moves used
+                sorted_mons = sorted(
+                    mon_brought_counts.keys(),
+                    key=lambda mon: (mon_brought_counts[mon], mon_move_counts.get(mon, 0)),
+                    reverse=True,
+                )
+                mvp_mon = sorted_mons[0]
+
+    card_stats = dbc.Card(
+    [
+        dbc.CardHeader("Player Statistics"),
+        dbc.CardBody(
+            [
+                # Row 1: Elo
+                dbc.Row(
+                    [
+                        dbc.Col(
+                            [
+                                html.Div("Current Elo", className="stat-label"),
+                                html.Div(f"{current_elo}", className="stat-value primary-stat"),
+                            ],
+                            width=6,
+                        ),
+                        dbc.Col(
+                            [
+                                html.Div("Peak Elo", className="stat-label"),
+                                html.Div(f"{peak_elo}", className="stat-value"),
+                            ],
+                            width=6,
+                        ),
+                    ],
+                    className="mb-3",
+                ),
+                # Row 2: GXE
+                dbc.Row(
+                    [
+                        dbc.Col(
+                            [
+                                html.Div("Current GXE", className="stat-label"),
+                                html.Div(f"{current_gxe}%", className="stat-value primary-stat"),
+                            ],
+                            width=6,
+                        ),
+                        dbc.Col(
+                            [
+                                html.Div("Peak GXE", className="stat-label"),
+                                html.Div(f"{peak_gxe}%", className="stat-value"),
+                            ],
+                            width=6,
+                        ),
+                    ],
+                ),
+                html.Hr(style={"borderColor": "rgba(255, 255, 255, 0.08)", "margin": "16px 0"}),
+                # Row 3: Recent / Total Games
+                dbc.Row(
+                    [
+                        dbc.Col(
+                            [
+                                html.Div("Recent Games", className="stat-label"),
+                                html.Div(
+                                    [
+                                        html.Span(f"{wins}W ", className="badge-win"),
+                                        html.Span(f"{losses}L", className="badge-loss"),
+                                    ]
+                                ),
+                            ],
+                            width=6,
+                        ),
+                        dbc.Col(
+                            [
+                                html.Div("Total Games", className="stat-label"),
+                                html.Div(f"{total_games}", className="stat-value"),
+                            ],
+                            width=6,
+                        ),
+                    ],
+                    className="mb-3",
+                ),
+                # Row 4: MVP & Today's Elo
+                dbc.Row(
+                    [
+                        dbc.Col(
+                            [
+                                html.Div("MVP (Last 10)", className="stat-label"),
+                                html.Div(
+                                    html.Span(
+                                        f"{mvp_mon}",
+                                        className="format-tag",
+                                        style={"fontWeight": "600", "color": "#f1f2f6"},
+                                    )
+                                ),
+                            ],
+                            width=6,
+                        ),
+                        dbc.Col(
+                            [
+                                html.Div("Elo Gain/Loss Today", className="stat-label"),
+                                html.Div(
+                                    html.Span(
+                                        f"{today_diff_str}",
+                                        className=(
+                                            "badge-win"
+                                            if today_diff_str.startswith("+")
+                                            else ("badge-loss" if today_diff_str.startswith("-") else "stat-value")
+                                        ),
+                                    )
+                                ),
+                            ],
+                            width=6,
+                        ),
+                    ],
+                ),
+                html.Hr(style={"borderColor": "rgba(255, 255, 255, 0.08)", "margin": "16px 0"}),
+                # Row 5: Streaks
+                dbc.Row(
+                    [
+                        dbc.Col(
+                            [
+                                html.Div("Longest Win Streak", className="stat-label"),
+                                html.Div(
+                                    html.Span(f"{longest_streak}W", className="badge-win"),
+                                ),
+                            ],
+                            width=6,
+                        ),
+                        dbc.Col(
+                            [
+                                html.Div("Current Streak", className="stat-label"),
+                                html.Div(
+                                    html.Span(
+                                        f"{current_streak}",
+                                        className=(
+                                            "badge-win"
+                                            if "W" in current_streak
+                                            else ("badge-loss" if "L" in current_streak else "stat-value")
+                                        ),
+                                    )
+                                ),
+                            ],
+                            width=6,
+                        ),
+                    ]
+                ),
+            ],
+            style={"padding": "20px"},
+        ),
+    ],
+    className="card h-100",
+)
 
     card_elo = dbc.Card(
         [

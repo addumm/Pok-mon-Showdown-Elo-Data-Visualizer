@@ -126,3 +126,97 @@ body {
   font-weight: 700;
   font-size: 0.85rem;
 }
+
+/* Landing Page Styles */
+.landing-container {
+  max-width: 900px;
+  margin: 40px auto;
+  padding: 0 20px;
+}
+
+.section-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text-main);
+  margin-bottom: 16px;
+  letter-spacing: 0.5px;
+}
+
+/* Instructions Grid */
+.instructions-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 16px;
+}
+
+.instruction-card {
+  padding: 20px;
+  position: relative;
+  overflow: hidden;
+
+  .step-num {
+    font-size: 2rem;
+    font-weight: 700;
+    color: rgba(108, 92, 231, 0.25);
+    position: absolute;
+    top: 10px;
+    right: 15px;
+  }
+
+  h4 {
+    margin: 0 0 8px 0;
+    color: var(--text-main);
+    font-size: 1rem;
+  }
+
+  p {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    line-height: 1.4;
+  }
+}
+
+/* Hot Streaks Table */
+.streaks-card {
+  padding: 10px 20px;
+}
+
+.streaks-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 0.9rem;
+
+  th {
+    padding: 12px 8px;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  td {
+    padding: 14px 8px;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  tr:last-child td {
+    border-bottom: none;
+  }
+}
+
+.format-tag {
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.elo-cell {
+  color: var(--accent-purple);
+  font-weight: 700;
+}

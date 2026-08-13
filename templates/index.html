@@ -16,7 +16,6 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
-    
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
     <title>PS! Stats</title>
 </head>
@@ -92,11 +91,38 @@
     {% endif %}
 
     {% if dash_url %}
-        <main style="padding: 20px 0;">
-            <iframe
-                src="{{ dash_url }}"
-                style="width: 100%; min-height: 900px; border: none; overflow: hidden;">
-            </iframe>
+    <main style="padding: 20px 0;">
+        <iframe
+            src="{{ dash_url }}"
+            style="width: 100%; min-height: 900px; border: none; overflow: hidden;">
+        </iframe>
+    </main>
+    {% else %}
+        <!-- LANDING VIEW FOR NEW / RETURNING USERS -->
+        <main class="landing-container">
+            
+            <!-- INSTRUCTIONS GRID -->
+            <section class="landing-section">
+                <h3 class="section-title">⚡ How to Track Your Stats</h3>
+                <div class="instructions-grid">
+                    <div class="card instruction-card">
+                        <div class="step-num">01</div>
+                        <h4 class="card-heading">Enter Username</h4>
+                        <p class="card-subtext">Type in any registered Pokémon Showdown username above to start automated tracking.</p>
+                    </div>
+                    <div class="card instruction-card">
+                        <div class="step-num">02</div>
+                        <h4 class="card-heading">Play Games</h4>
+                        <p class="card-subtext">Go play matches on Showdown. Our background cron jobs will periodically pull your new ratings.</p>
+                    </div>
+                    <div class="card instruction-card">
+                        <div class="step-num">03</div>
+                        <h4 class="card-heading">Analyze Progress</h4>
+                        <p class="card-subtext">Select your desired format to view detailed Elo trends, win rates, and team replays!</p>
+                    </div>
+                </div>
+            </section>
+
         </main>
     {% endif %}
 </body>

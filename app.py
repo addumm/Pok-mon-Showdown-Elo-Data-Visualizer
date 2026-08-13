@@ -56,7 +56,11 @@ dash_app = Dash(
     __name__,
     server=app,
     url_base_pathname="/elo/",
-    external_stylesheets=[dbc.themes.DARKLY],
+    external_stylesheets=[
+        "https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css",
+        "https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap",
+        "/static/styles.css",
+    ],
 )
 
 # static shell: dcc.Location tracks URL query parameters (?username=xxx&format=yyy)
@@ -125,53 +129,41 @@ def render_page_content(search_str):
 
         plots_df["timestamp_str"] = plots_df["timestamp"].dt.strftime("%b %d, %Y %I:%M %p")
 
-    # if no data in plots_df
+    # Common layout for Plotly figures matching the CSS theme
+    plotly_layout_defaults = dict(
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(color="#f1f2f6", family="Inter, sans-serif"),
+        margin=dict(l=40, r=20, t=40, b=40),
+        autosize=True,
+    )
+
+    # 1. Empty State
     if plots_df.empty or plots_df["format"].empty:
         fig = px.line(title="No data for this user/format", template="plotly_dark")
-        pie_fig = px.pie(
-            title="No data for this user/format",
-            template="plotly_dark",
-            height=200,
-        )
-        pie_fig.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
+        fig.update_layout(**plotly_layout_defaults)
+        
+        pie_fig = px.pie(title="No data for this user/format", template="plotly_dark")
+        pie_fig.update_layout(**plotly_layout_defaults)
 
-        peak_elo = 1000
-        peak_gxe = 0
-        current_elo = 1000
-        current_gxe = 0
-        total_games = 0
-        wins = 0
-        losses = 0
+        peak_elo, peak_gxe, current_elo, current_gxe, total_games, wins, losses = 1000, 0, 1000, 0, 0, 0, 0
 
-    # if 1 data point
+    # 2. Single Data Point
     elif len(plots_df) == 1:
         plots_df["elo"] = round(plots_df["elo"])
-        plots_df["timestamp"] = plots_df["timestamp"].dt.strftime("%B %d %Y %I:%M %p")
-
         fig = px.scatter(
             plots_df,
             x="timestamp",
             y="elo",
-            title=f"Elo Progression for {selected_format}",
+            title=f"Elo Progression — {selected_format}",
             template="plotly_dark",
         )
+        fig.update_traces(marker=dict(color="#6c5ce7", size=10))
         fig.update_layout(
-            title={
-                "text": f"Elo Progression for {selected_format}",
-                "y": 0.95,
-                "x": 0.5,
-                "xanchor": "center",
-                "yanchor": "top",
-            },
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)",
-            font=dict(color="#8c9baf", family="Inter, sans-serif"),
+            **plotly_layout_defaults,
             xaxis=dict(showticklabels=False, showgrid=False, zeroline=False),
-            yaxis=dict(gridcolor="#2b3346", zeroline=False, dtick=50, tick0=50),
-            margin=dict(l=50, r=30, t=60, b=40),
-            autosize=True,
+            yaxis=dict(gridcolor="rgba(255, 255, 255, 0.08)", zeroline=False, dtick=50),
         )
-        fig.update_traces(line_color="#6c5ce7", line_width=3)
 
         latest = plots_df.tail(1)
         wins = int(latest["wins"].iloc[0])
@@ -183,82 +175,52 @@ def render_page_content(search_str):
             values="count",
             names="result",
             color="result",
-            color_discrete_map={"Wins": "#4CAF50", "Losses": "#E84057"},
+            color_discrete_map={"Wins": "#2ed573", "Losses": "#ff4757"},
             hole=0.7,
             template="plotly_dark",
-            height=200,
         )
         pie_fig.update_traces(
             textposition="inside",
             textinfo="percent",
-            marker=dict(line=dict(color="#1c212e", width=2)),
-            pull=[0, 0],
+            marker=dict(line=dict(color="#121824", width=2)),
             hoverinfo="label+value",
             textfont={"color": "white", "size": 13},
         )
-        pie_fig.update_layout(
-            margin=dict(l=20, r=20, t=20, b=20),
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)",
-            hoverlabel=dict(font_color="white"),
-            showlegend=True,
-            autosize=True,
-            legend_itemclick=False,
-            legend_itemdoubleclick=False,
-        )
+        pie_fig.update_layout(**plotly_layout_defaults, showlegend=True, legend_itemclick=False)
 
         peak_elo = int(plots_df["elo"].max())
         peak_gxe = plots_df["gxe"].max()
         current_elo = int(latest["elo"].iloc[0])
         current_gxe = float(latest["gxe"].iloc[0])
-        total_games = int(latest["wins"] + latest["losses"].iloc[0])
+        total_games = int(latest["wins"].iloc[0] + latest["losses"].iloc[0])
 
-    # constructing plots for existing users w/ >1 data point 
+    # 3. Multi Data Point Progression
     else:
         plots_df["elo"] = round(plots_df["elo"])
-        plots_df["timestamp"] = plots_df["timestamp"].dt.strftime("%B %d %Y %I:%M %p")
-
         fig = px.line(
             plots_df,
             x="timestamp",
             y="elo",
-            title=f"Elo Progression for {selected_format}",
+            title=f"Elo Progression — {selected_format}",
             template="plotly_dark",
         )
         fig.update_traces(
             line_color="#6c5ce7",
             line_width=3,
             fill="tozeroy",
-            fillcolor="rgba(108, 92, 231, 0.18)",
+            fillcolor="rgba(108, 92, 231, 0.15)",
         )
 
         min_elo = max(plots_df["elo"].min() - 50, 900)
-
         fig.update_layout(
-            title={
-                "text": f"Elo Progression for {selected_format}",
-                "y": 0.95,
-                "x": 0.5,
-                "xanchor": "center",
-                "yanchor": "top",
-            },
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)",
-            font=dict(color="#8c9baf", family="Inter, sans-serif"),
+            **plotly_layout_defaults,
             yaxis=dict(
-                gridcolor="#2b3346",
+                gridcolor="rgba(255, 255, 255, 0.08)",
                 zeroline=False,
                 range=[min_elo, plots_df["elo"].max() + 50],
             ),
-            margin=dict(l=50, r=30, t=60, b=40),
-            autosize=True,
         )
-        fig.update_xaxes(
-            type="category",
-            showgrid=False,
-            zeroline=False,
-            showticklabels=False,
-        )
+        fig.update_xaxes(type="category", showgrid=False, zeroline=False, showticklabels=False)
 
         latest = plots_df.tail(1)
         wins = int(latest["wins"].iloc[0])
@@ -270,30 +232,18 @@ def render_page_content(search_str):
             values="count",
             names="result",
             color="result",
-            color_discrete_map={"Wins": "#4CAF50", "Losses": "#E84057"},
+            color_discrete_map={"Wins": "#2ed573", "Losses": "#ff4757"},
             hole=0.7,
             template="plotly_dark",
-            height=200,
         )
-
         pie_fig.update_traces(
             textposition="inside",
             textinfo="percent",
-            marker=dict(line=dict(color="#1c212e", width=2)),
-            pull=[0, 0],
+            marker=dict(line=dict(color="#121824", width=2)),
             hoverinfo="label+value",
             textfont={"color": "white", "size": 13},
         )
-        pie_fig.update_layout(
-            margin=dict(l=20, r=20, t=20, b=20),
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)",
-            hoverlabel=dict(font_color="white"),
-            showlegend=True,
-            autosize=True,
-            legend_itemclick=False,
-            legend_itemdoubleclick=False,
-        )
+        pie_fig.update_layout(**plotly_layout_defaults, showlegend=True, legend_itemclick=False)
 
         peak_elo = int(plots_df["elo"].max())
         peak_gxe = plots_df["gxe"].max()
@@ -311,10 +261,10 @@ def render_page_content(search_str):
         wins = sum(1 for i in recent_matches if i.indicator == "W")
         losses = sum(1 for i in recent_matches if i.indicator == "L")
 
-    ### teams/match history card ###
+    # --- CARDS WITH MATCHING CSS CLASSES ---
     teams_stats = dbc.Card(
         [
-            dbc.CardHeader("Match History & Teams", style={"fontWeight": "600"}),
+            dbc.CardHeader("Match History & Teams"),
             dbc.CardBody(
                 [
                     dbc.Spinner(
@@ -324,13 +274,12 @@ def render_page_content(search_str):
                         size="md",
                     )
                 ],
-                style={"padding": "12px"},
+                style={"padding": "16px"},
             ),
         ],
-        className="h-100",
+        className="card h-100",
     )
 
-    # cards for player stats
     card_stats = dbc.Card(
         [
             dbc.CardHeader("Player Statistics"),
@@ -340,14 +289,14 @@ def render_page_content(search_str):
                         [
                             dbc.Col(
                                 [
-                                    html.Div("Current Elo ", className="stat-label"),
+                                    html.Div("Current Elo", className="stat-label"),
                                     html.Div(f"{current_elo}", className="stat-value primary-stat"),
                                 ],
                                 width=6,
                             ),
                             dbc.Col(
                                 [
-                                    html.Div("Peak Elo ", className="stat-label"),
+                                    html.Div("Peak Elo", className="stat-label"),
                                     html.Div(f"{peak_elo}", className="stat-value"),
                                 ],
                                 width=6,
@@ -359,14 +308,14 @@ def render_page_content(search_str):
                         [
                             dbc.Col(
                                 [
-                                    html.Div("Current GXE ", className="stat-label"),
+                                    html.Div("Current GXE", className="stat-label"),
                                     html.Div(f"{current_gxe}%", className="stat-value primary-stat"),
                                 ],
                                 width=6,
                             ),
                             dbc.Col(
                                 [
-                                    html.Div("Peak GXE ", className="stat-label"),
+                                    html.Div("Peak GXE", className="stat-label"),
                                     html.Div(f"{peak_gxe}%", className="stat-value"),
                                 ],
                                 width=6,
@@ -374,12 +323,12 @@ def render_page_content(search_str):
                         ],
                         className="mb-3",
                     ),
-                    html.Hr(className="stat-divider"),
+                    html.Hr(style={"borderColor": "rgba(255, 255, 255, 0.08)", "margin": "16px 0"}),
                     dbc.Row(
                         [
                             dbc.Col(
                                 [
-                                    html.Div("Recent Games ", className="stat-label"),
+                                    html.Div("Recent Games", className="stat-label"),
                                     html.Div(
                                         [
                                             html.Span(f"{wins}W ", className="badge-win"),
@@ -391,17 +340,18 @@ def render_page_content(search_str):
                             ),
                             dbc.Col(
                                 [
-                                    html.Div("Total Games ", className="stat-label"),
+                                    html.Div("Total Games", className="stat-label"),
                                     html.Div(f"{total_games}", className="stat-value"),
                                 ],
                                 width=6,
                             ),
                         ]
                     ),
-                ]
+                ],
+                style={"padding": "20px"},
             ),
         ],
-        className="h-100",
+        className="card h-100",
     )
 
     card_elo = dbc.Card(
@@ -414,9 +364,11 @@ def render_page_content(search_str):
                         figure=fig,
                         config={"displayModeBar": False},
                     )
-                ]
+                ],
+                style={"padding": "10px"},
             ),
-        ]
+        ],
+        className="card",
     )
 
     card_wl = dbc.Card(
@@ -429,27 +381,38 @@ def render_page_content(search_str):
                         figure=pie_fig,
                         config={"displayModeBar": False},
                     )
-                ]
+                ],
+                style={"padding": "10px"},
             ),
-        ]
+        ],
+        className="card h-100",
     )
 
     return dbc.Container(
         [
             dcc.Store(id="store-username", data=current_username),
             dcc.Store(id="store-format", data=selected_format),
-            dbc.Row([dbc.Col(card_elo, width=12, className="mb-3")]),
+            
+            # Top Full-Width Elo Chart
+            dbc.Row(
+                [
+                    dbc.Col(card_elo, width=12),
+                ],
+                className="mb-4",
+            ),
+            
+            # Bottom 3 Cards Side-by-Side Grid
             dbc.Row(
                 [
                     dbc.Col(card_stats, xs=12, md=4, className="mb-3"),
                     dbc.Col(card_wl, xs=12, md=4, className="mb-3"),
                     dbc.Col(teams_stats, xs=12, md=4, className="mb-3"),
                 ],
-                className="g-3",
+                className="g-3 d-flex flex-wrap",
             ),
         ],
         fluid=True,
-        style={"padding": "20px 30px"},
+        style={"maxWidth": "1280px", "margin": "0 auto", "padding": "20px"},
     )
 
 @dash_app.callback(
@@ -505,9 +468,9 @@ def load_replays_async(current_username, selected_format):
                     src=get_sprite_url(species),
                     title=species,
                     style={
-                        "height": "48px",
-                        "width": "48px",
-                        "marginRight": "6px",
+                        "height": "40px",
+                        "width": "40px",
+                        "marginRight": "2px",
                         "objectFit": "contain",
                     },
                 )
@@ -671,6 +634,7 @@ def index():
             error_message=None,
             header_sprite_id=random_pokemon_id,
         )
+    
 # for export data to csv button
 @app.route("/export/<username>", methods=["GET"])
 @limiter.limit("10 per minute")

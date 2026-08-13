@@ -590,15 +590,19 @@ def load_mvp_async(current_username, selected_format):
     for r_id in target_replays:
         r_stats = stats_map.get(r_id)
         if r_stats:
-            for mon, move_count in r_stats.get("moves_used", {}).items():
-                mon_move_counts[mon] += move_count
+            move_usage_data = r_stats.get("move_usage", {})
+            for mon, moves_dict in move_usage_data.items():
+                if isinstance(moves_dict, dict):
+                    # Sum up the counts of all moves used by this mon
+                    total_mon_moves = sum(moves_dict.values())
+                    mon_move_counts[mon] += total_mon_moves
 
     sorted_mons = sorted(
         mon_brought_counts.keys(),
         key=lambda mon: (mon_brought_counts[mon], mon_move_counts.get(mon, 0)),
         reverse=True,
     )
-
+    
     return sorted_mons[0] if sorted_mons else "N/A"
 
 @dash_app.callback(
@@ -648,7 +652,7 @@ def load_replays_async(current_username, selected_format):
         # grab up to 10 replay IDs
         target_replays = list(user_teams.keys())[:10]
 
-        # BATCH FETCH ALL STATS CONCURRENTLY IN THREADS
+        # BATCH FETCH ALL STATS CONCURRENTLY IN THREADS #
         stats_map = fetch_stats_concurrently(target_replays, current_username, max_workers=5)
 
         replay_cards = []
@@ -831,9 +835,11 @@ def index():
         )
         formats = [f[0] for f in formats]
 
+        # automatically take first format if nothing selected and there exists a format
         if not selected_format and formats:
             selected_format = formats[0]
 
+        # no format selected defaults to None format
         if not selected_format:
             selected_format = "None"
 

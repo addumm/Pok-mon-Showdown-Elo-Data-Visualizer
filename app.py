@@ -129,7 +129,7 @@ def render_page_content(search_str):
 
         plots_df["timestamp_str"] = plots_df["timestamp"].dt.strftime("%b %d, %Y %I:%M %p")
 
-    # Common layout for Plotly figures matching the CSS theme
+    # layout for Plotly figures matching the CSS theme
     plotly_layout_defaults = dict(
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
@@ -138,7 +138,7 @@ def render_page_content(search_str):
         autosize=True,
     )
 
-    # 1. Empty State
+    # empty df
     if plots_df.empty or plots_df["format"].empty:
         fig = px.line(title="No data for this user/format", template="plotly_dark")
         fig.update_layout(**plotly_layout_defaults)
@@ -148,7 +148,7 @@ def render_page_content(search_str):
 
         peak_elo, peak_gxe, current_elo, current_gxe, total_games, wins, losses = 1000, 0, 1000, 0, 0, 0, 0
 
-    # 2. Single Data Point
+    # single data point
     elif len(plots_df) == 1:
         plots_df["elo"] = round(plots_df["elo"])
         fig = px.scatter(
@@ -194,7 +194,7 @@ def render_page_content(search_str):
         current_gxe = float(latest["gxe"].iloc[0])
         total_games = int(latest["wins"].iloc[0] + latest["losses"].iloc[0])
 
-    # 3. Multi Data Point Progression
+    # multiple data points
     else:
         plots_df["elo"] = round(plots_df["elo"])
         fig = px.line(

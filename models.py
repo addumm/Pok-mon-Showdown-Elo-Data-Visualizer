@@ -35,4 +35,5 @@ class ReplayCache(db.Model):
     userid = db.Column(db.String(18), nullable=False, index=True)
     format = db.Column(db.String(50), nullable=False, index=True)
     teams_json = db.Column(db.Text, nullable=False, default="{}")
+    replay_stats_json = db.Column(db.Text, nullable=True, default="{}")
     updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)

@@ -13,6 +13,7 @@ import random
 import re
 from urllib.parse import parse_qs
 from io import StringIO
+from replay_parser import fetch_stats_concurrently
 
 from showdown_client import (
     ShowdownUnavailableError,
@@ -459,8 +460,15 @@ def load_replays_async(current_username, selected_format):
             user_teams = {}
 
     if user_teams:
+        # grab up to 10 replay IDs
+        target_replays = list(user_teams.keys())[:10]
+
+        # BATCH FETCH ALL STATS CONCURRENTLY IN THREADS
+        stats_map = fetch_stats_concurrently(target_replays, current_username, max_workers=5)
+
         replay_cards = []
-        for replay_id, team_species in list(user_teams.items())[:10]: ## can adjust to desired number of teams/replays shown
+        for replay_id in target_replays:
+            team_species = user_teams[replay_id]
             replay_url = f"https://replay.pokemonshowdown.com/{replay_id}"
 
             sprite_imgs = [
@@ -476,6 +484,27 @@ def load_replays_async(current_username, selected_format):
                 )
                 for species in team_species
             ]
+
+            # pull pre-fetched stats out of the dictionary
+            stats = stats_map.get(replay_id)
+            
+            stats_content = []
+            if stats and stats.get("move_usage"):
+                for mon, moves in stats["move_usage"].items():
+                    top_moves = ", ".join([f"{m} ({c}x)" for m, c in moves.items()])
+                    stats_content.append(
+                        html.Div(
+                            [
+                                html.Span(f"{mon}: ", style={"fontWeight": "600", "color": "#f1f2f6"}),
+                                html.Span(top_moves, style={"color": "#768396", "fontSize": "0.75rem"}),
+                            ],
+                            style={"marginTop": "2px"}
+                        )
+                    )
+            else:
+                stats_content = [
+                    html.Div("No detailed log stats available.", style={"color": "#768396", "fontSize": "0.75rem"})
+                ]
 
             row = html.Div(
                 [
@@ -501,8 +530,17 @@ def load_replays_async(current_username, selected_format):
                             "display": "flex",
                             "alignItems": "center",
                             "flexWrap": "wrap",
+                            "marginBottom": "6px",
                         },
                     ),
+                    html.Div(
+                        stats_content,
+                        style={
+                            "borderTop": "1px solid rgba(255,255,255,0.05)",
+                            "paddingTop": "6px",
+                            "fontSize": "0.8rem"
+                        }
+                    )
                 ],
                 style={
                     "backgroundColor": "#121621",
@@ -518,7 +556,7 @@ def load_replays_async(current_username, selected_format):
             replay_cards,
             style={
                 "overflowY": "auto",
-                "maxHeight": "210px",
+                "maxHeight": "350px",
                 "paddingRight": "4px",
             },
         )

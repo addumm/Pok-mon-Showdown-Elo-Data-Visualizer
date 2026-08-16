@@ -191,35 +191,54 @@ def get_sprite_url(species: str) -> str:
 
     return f"https://play.pokemonshowdown.com/sprites/gen5/{pokemon_id}.png"
 
-def calculate_streaks(indicators: list[str]) -> tuple[int, str]:
-    """
-    Given a list of match indicators ('W' or 'L') in chronological order:
-    Returns (longest_win_streak, current_streak_str)
-    Example return: (7, "3W") or (5, "2L")
-    """
-    if not indicators:
+def calculate_streaks(ratings: list) -> tuple[int, str]:
+    if not ratings or len(ratings) < 2:
         return 0, "N/A"
 
-    longest_win_streak = 0
+    max_win_streak = 0
     current_win_streak = 0
     
-    # calculate longest win streak (chronological order)
-    for ind in indicators:
-        if ind == "W":
-            current_win_streak += 1
-            if current_win_streak > longest_win_streak:
-                longest_win_streak = current_win_streak
-        else:
-            current_win_streak = 0
+    # store history of win/loss outcomes between consecutive rating snapshots
+    match_outcomes = []
 
-    # calculate current active streak from the most recent match
-    latest = indicators[-1]
+    for i in range(1, len(ratings)):
+        prev = ratings[i - 1]
+        curr = ratings[i]
+
+        elo_went_up = curr.elo > prev.elo
+        win_increment = (curr.wins == prev.wins + 1)
+        losses_unchanged = (curr.losses == prev.losses)
+
+        # check for a clean win increment
+        if elo_went_up and win_increment and losses_unchanged:
+            current_win_streak += 1
+            if current_win_streak > max_win_streak:
+                max_win_streak = current_win_streak
+            match_outcomes.append("W")
+        else:
+            # cut/reset the winstreak on non-win/loss steps
+            current_win_streak = 0
+            
+            loss_increment = (curr.losses == prev.losses + 1)
+            wins_unchanged = (curr.wins == prev.wins)
+            if loss_increment and wins_unchanged:
+                match_outcomes.append("L")
+            else:
+                match_outcomes.append("UNKNOWN")
+
+    if not match_outcomes:
+        return 0, "N/A"
+
+    latest = match_outcomes[-1]
+    if latest not in ("W", "L"):
+        return max_win_streak, "N/A"
+
     count = 0
-    for ind in reversed(indicators):
-        if ind == latest:
+    for outcome in reversed(match_outcomes):
+        if outcome == latest:
             count += 1
         else:
             break
 
     current_streak_str = f"{count}{latest}"
-    return longest_win_streak, current_streak_str
+    return max_win_streak, current_streak_str

@@ -268,14 +268,13 @@ def render_page_content(search_str):
         wins = sum(1 for i in recent_matches if i.indicator == "W")
         losses = sum(1 for i in recent_matches if i.indicator == "L")
 
-    all_matches = (
-        db.session.query(MatchHistory.indicator)
+    all_ratings = (
+        db.session.query(PlayerRating)
         .filter_by(userid=current_username, format=selected_format)
-        .order_by(MatchHistory.timestamp.asc())
+        .order_by(PlayerRating.timestamp.asc())
         .all()
     )
-    match_indicators = [m.indicator for m in all_matches]
-    longest_streak, current_streak = calculate_streaks(match_indicators)
+    longest_streak, current_streak = calculate_streaks(all_ratings)
 
     try:
         local_tz = pytz.timezone(user_tz)

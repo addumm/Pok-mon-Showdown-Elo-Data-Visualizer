@@ -5,8 +5,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 def fetch_stats_concurrently(replay_ids: list[str], target_username: str, max_workers: int = 5) -> dict:
     """
-    Fetches and parses replay stats for multiple replay IDs in parallel.
-    Returns a dictionary mapping replay_id -> parsed_stats.
+    fetches and parses replay stats for multiple replay ids in parallel.
+    returns a dictionary mapping replay_id -> parsed_stats.
     """
     results = {}
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -106,4 +106,19 @@ def fetch_and_parse_replay_stats(replay_id: str, target_username: str):
         "fainted_pokemon": list(fainted_pokemon),
         "turns_active": dict(turns_active),
         "move_usage": {k: dict(v) for k, v in move_usage.items()}
+    }
+
+def build_llm_game_summary_payload(replay_id: str, target_username: str) -> dict:
+    stats = fetch_and_parse_replay_stats(replay_id, target_username)
+    if not stats:
+        return None
+    
+    return {
+        "replay_id": stats["replay_id"],
+        "user": target_username,
+        "turns": stats["total_turns"],
+        "team_brought": stats["brought_pokemon"],
+        "faints": stats["fainted_pokemon"],
+        "move_usage": stats["move_usage"],
+        "timeline": stats.get("key_events", [])
     }

@@ -540,7 +540,7 @@ def render_page_content(search_str):
                     [
                         html.Span("✨ AI Replay Analyzer", className="fw-bold"),
                         html.Span(
-                            "1 Link = Single Game | 2-5 Links = Multi-Game Trend",
+                            "1 Link = Single Game | Up to 3 Links = Multi-Game Trend",
                             className="stat-label float-end fw-normal",
                             style={"textTransform": "none"}
                         ),

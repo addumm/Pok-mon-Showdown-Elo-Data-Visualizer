@@ -37,3 +37,18 @@ class ReplayCache(db.Model):
     teams_json = db.Column(db.Text, nullable=False, default="{}")
     replay_stats_json = db.Column(db.Text, nullable=True, default="{}")
     updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
+
+# for ai analysis
+class GameAnalysis(db.Model):
+    __tablename__ = "game_analysis"
+    id = db.Column(db.Integer, primary_key=True)
+    replay_id = db.Column(db.String(50), unique=True, nullable=False, index=True)
+    userid = db.Column(db.String(18), nullable=False)
+    matchup = db.Column(db.Text)
+    win_condition = db.Column(db.Text)
+    turning_point_turn = db.Column(db.Integer)
+    turning_point_reason = db.Column(db.Text)
+    critical_mistakes = db.Column(db.JSON)
+    mvp_pokemon = db.Column(db.String(50))
+    created_at = db.Column(db.DateTime, default=get_utc_now)
+    luck = db.Column(db.Text, nullable=True)

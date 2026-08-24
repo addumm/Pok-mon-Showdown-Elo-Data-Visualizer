@@ -252,3 +252,109 @@ body {
 .card-body {
   flex: 1 1 auto !important;
 }
+
+.modal-header .btn-close {
+  filter: invert(1) grayscale(100%) brightness(200%);
+}
+
+/* AI REPLAY ANALYZER BANNER STYLES */
+.ai-banner-section {
+  margin-top: 32px;
+}
+
+.ai-banner-card {
+  padding: 28px;
+  background-color: var(--bg-card) !important;
+  border: 1px solid var(--border-highlight) !important;
+  box-shadow: 0 4px 24px rgba(108, 92, 231, 0.12);
+}
+
+.ai-banner-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.ai-title-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ai-sparkle-icon {
+  font-size: 1.25rem;
+}
+
+.ai-banner-title {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--text-main) !important;
+  margin: 0;
+}
+
+.ai-tag {
+  background: rgba(108, 92, 231, 0.2);
+  color: var(--accent-purple-hover);
+  border: 1px solid var(--border-highlight);
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 20px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.ai-banner-subtext {
+  color: var(--text-muted) !important;
+  font-size: 0.9rem;
+  margin: 0 0 20px 0;
+}
+
+.ai-features-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.ai-feature-card {
+  background-color: var(--bg-input);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 18px;
+}
+
+.ai-feature-badge {
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 4px;
+  margin-bottom: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.badge-single {
+  background-color: rgba(108, 92, 231, 0.2);
+  color: var(--accent-purple-hover);
+}
+
+.badge-multi {
+  background-color: rgba(0, 210, 211, 0.15);
+  color: var(--accent-blue);
+}
+
+.ai-feature-heading {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-main);
+  margin: 0 0 6px 0;
+}
+
+.ai-feature-desc {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin: 0;
+  line-height: 1.45;
+}

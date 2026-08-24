@@ -1,4 +1,4 @@
-from dash import Dash, Input, Output, dcc, html
+from dash import Dash, Input, Output, State, dcc, html, callback_context
 import dash_bootstrap_components as dbc
 from flask import Flask, render_template, request, has_request_context, Response, make_response, redirect, url_for
 from flask_limiter import Limiter
@@ -11,9 +11,10 @@ import pandas as pd
 import plotly.express as px
 import random
 import re
+import time
 from urllib.parse import parse_qs
 from io import StringIO
-from replay_parser import fetch_stats_concurrently
+from replay_parser import fetch_stats_concurrently, parse_replay_ids, fetch_and_parse_replay_stats
 import pytz
 from datetime import datetime
 from collections import defaultdict
@@ -26,7 +27,8 @@ from showdown_client import (
     calculate_streaks
 )
 from sqlalchemy import select
-from models import MatchHistory, PlayerRating, ReplayCache, db
+from models import MatchHistory, PlayerRating, ReplayCache, db, GameAnalysis
+from analyzer import analyze_single_game, analyze_multi_games
 
 app = Flask(__name__)
 Scss(app)
@@ -67,13 +69,213 @@ dash_app = Dash(
     ],
 )
 
-# static shell: dcc.Location tracks URL query parameters (?username=xxx&format=yyy)
 dash_app.layout = html.Div(
     [
         dcc.Location(id="url", refresh=False),
         html.Div(id="page-content"),
     ]
 )
+
+### HELPER FOR AI SUMMARY ###
+def render_single_modal_body(data):
+    """Formats SingleGameAnalysis output inside the modal."""
+    mistakes = [html.Li(m, className="mb-1") for m in data.critical_mistakes] if data.critical_mistakes else []
+    return html.Div([
+        dbc.Badge(f"MVP: {data.mvp_pokemon}", color="success", className="mb-3 p-2", style={"fontSize": "0.9rem"}),
+        html.Div([
+            html.H6("Matchup Overview", className="text-primary fw-bold"),
+            html.P(data.matchup, className="text-light small"),
+        ], className="mb-3"),
+        html.Div([
+            html.H6("Core Win Condition", className="text-primary fw-bold"),
+            html.P(data.win_condition, className="text-light small"),
+        ], className="mb-3"),
+        html.Div([
+            html.H6("RNG & Luck Factor", className="text-info fw-bold"),
+            html.P(data.luck, className="text-light small"),
+        ], className="mb-3"),
+        html.Div([
+            html.H6(f"Turning Point (Turn {data.turning_point_turn})", className="text-warning fw-bold"),
+            html.P(data.turning_point_reason, className="text-light small"),
+        ], className="mb-3"),
+        html.Div([
+            html.H6("Critical Mistakes & Suboptimal Plays", className="text-danger fw-bold"),
+            html.Ul(mistakes, className="text-light small ps-3"),
+        ])
+    ])
+
+
+def render_multi_modal_body(analysis, was_truncated=False, total_provided=0):
+    """Formats MultiGameAnalysis output inside the modal."""
+    overperforming = [html.Li(p, className="text-success") for p in analysis.overperforming_pokemon]
+    underperforming = [html.Li(p, className="text-danger") for p in analysis.underperforming_pokemon]
+    habits = [html.Li(h) for h in analysis.playstyle_habits]
+    luck_items = [html.Li(l) for l in analysis.luck] if isinstance(analysis.luck, list) else [html.Li(analysis.luck)]
+    adjustments = [html.Li(a) for a in analysis.strategic_adjustments]
+
+    truncation_banner = None
+    if was_truncated:
+        truncation_banner = dbc.Alert(
+            f"Note: You provided {total_provided} replays. To optimize analysis performance and token speed, trend analysis was capped to the first 5 games.",
+            color="warning",
+            className="mb-3 small py-2",
+            dismissable=True
+        )
+
+    return html.Div([
+        truncation_banner,
+        html.Div([
+            html.H6("Executive Performance Summary", className="text-info fw-bold"),
+            html.P(analysis.summary_overview, className="text-light small"),
+        ], className="mb-3"),
+        dbc.Row([
+            dbc.Col([
+                html.H6("Overperforming Assets", className="text-success fw-bold"),
+                html.Ul(overperforming, className="small ps-3")
+            ], width=6),
+            dbc.Col([
+                html.H6("Underperforming Assets", className="text-danger fw-bold"),
+                html.Ul(underperforming, className="small ps-3")
+            ], width=6),
+        ], className="mb-3"),
+        html.Div([
+            html.H6("Identified Playstyle Habits & Patterns", className="text-warning fw-bold"),
+            html.Ul(habits, className="text-light small ps-3"),
+        ], className="mb-3"),
+        html.Div([
+            html.H6("RNG & Luck Factor (Across Games)", className="text-info fw-bold"),
+            html.Ul(luck_items, className="text-light small ps-3"),
+        ], className="mb-3"),
+        html.Div([
+            html.H6("Recommended Tactical Adjustments", className="text-primary fw-bold"),
+            html.Ul(adjustments, className="text-light small ps-3"),
+        ])
+    ])
+
+
+# --- RATE LIMITING HELPER FOR AI ANALYSIS ---
+AI_LIMIT_WINDOW = 3600  # 1 hour window in seconds
+AI_MAX_REQUESTS = 4     # Limit to 4 AI analyses per hour per IP
+ip_request_history = defaultdict(list)
+
+def is_rate_limited(user_ip: str) -> bool:
+    """Returns True if the IP has exceeded AI_MAX_REQUESTS within AI_LIMIT_WINDOW."""
+    now = time.time()
+    # Retain only timestamps within the current window
+    ip_request_history[user_ip] = [
+        t for t in ip_request_history[user_ip] if now - t < AI_LIMIT_WINDOW
+    ]
+    if len(ip_request_history[user_ip]) >= AI_MAX_REQUESTS:
+        return True
+    
+    ip_request_history[user_ip].append(now)
+    return False
+
+
+@dash_app.callback(
+    [
+        Output("ai-modal", "is_open"),
+        Output("modal-title", "children"),
+        Output("modal-body-content", "children"),
+        Output("btn-run-ai-analysis", "children"), # Output target inside dcc.Loading
+    ],
+    [
+        Input("btn-run-ai-analysis", "n_clicks"),
+        Input("btn-close-modal", "n_clicks"),
+    ],
+    [
+        State("replay-url-input", "value"),
+        State("store-username", "data"),
+    ],
+    prevent_initial_call=True
+)
+def handle_text_input_analysis(n_clicks_run, n_clicks_close, raw_text, username):
+    ctx = callback_context
+    if not ctx.triggered:
+        return False, "", "", "Analyze Replays"
+
+    triggered_id = ctx.triggered[0]["prop_id"].split(".")[0]
+
+    if triggered_id == "btn-close-modal":
+        return False, "", "", "Analyze Replays"
+
+    # Extract all IDs first (without cap) to evaluate total input count
+    all_replay_ids = parse_replay_ids(raw_text, max_replays=999)
+
+    if not all_replay_ids:
+        return True, "Invalid Input", html.Div("Please enter at least one valid Pokémon Showdown replay URL or ID.", className="text-warning"), "Analyze Replays"
+
+    target_user = username or "Player"
+
+    # Serve cached single game analyses immediately without hitting rate limits
+    if len(all_replay_ids) == 1:
+        cached = GameAnalysis.query.filter_by(replay_id=all_replay_ids[0]).first()
+        if cached:
+            return True, f"Single-Game Analysis — {all_replay_ids[0]}", render_single_modal_body(cached), "Analyze Replays"
+
+    # Extract client IP through proxies (Render compatibility)
+    client_ip = request.headers.get("X-Forwarded-For", request.remote_addr)
+    if client_ip and "," in client_ip:
+        client_ip = client_ip.split(",")[0].strip()
+
+    # Enforce rate limits for non-cached requests
+    if is_rate_limited(client_ip):
+        return (
+            True,
+            "Rate Limit Exceeded",
+            html.Div("You have reached the maximum limit of 3 AI analyses per hour. Please try again later.", className="text-danger fw-bold"),
+            "Analyze Replays"
+        )
+
+    # Enforce 5-game cap for token efficiency
+    was_truncated = False
+    total_provided = len(all_replay_ids)
+    if total_provided > 5:
+        replay_ids = all_replay_ids[:5]
+        was_truncated = True
+    else:
+        replay_ids = all_replay_ids
+
+    # --- route1: single game analysis ---
+    if len(replay_ids) == 1:
+        replay_id = replay_ids[0]
+
+        parsed_payload = fetch_and_parse_replay_stats(replay_id, target_user)
+        if not parsed_payload:
+            return True, "Parsing Error", html.Div(f"Could not parse replay log for '{replay_id}'. Verify the replay link exists.", className="text-danger"), "Analyze Replays"
+
+        analysis = analyze_single_game(parsed_payload)
+
+        # save cache
+        record = GameAnalysis(
+            replay_id=replay_id,
+            userid=target_user,
+            matchup=analysis.matchup,
+            win_condition=analysis.win_condition,
+            luck=analysis.luck,
+            turning_point_turn=analysis.turning_point_turn,
+            turning_point_reason=analysis.turning_point_reason,
+            critical_mistakes=analysis.critical_mistakes,
+            mvp_pokemon=analysis.mvp_pokemon
+        )
+        db.session.add(record)
+        db.session.commit()
+
+        return True, f"Single-Game Analysis — {replay_id}", render_single_modal_body(record), "Analyze Replays"
+
+    # --- route2: multi-game analysis ---
+    else:
+        parsed_results = fetch_stats_concurrently(replay_ids, target_user, max_workers=5)
+        game_payloads = [payload for payload in parsed_results.values() if payload]
+
+        if not game_payloads:
+            return True, "Parsing Error", html.Div("Failed to fetch or parse any of the provided replays.", className="text-danger"), "Analyze Replays"
+
+        multi_analysis = analyze_multi_games(target_user, game_payloads)
+        return True, f"Multi-Game Trend Analysis ({len(game_payloads)} Matches)", render_multi_modal_body(
+            multi_analysis, was_truncated=was_truncated, total_provided=total_provided
+        ), "Analyze Replays"
+
 
 @dash_app.callback(
     Output("page-content", "children"),
@@ -331,150 +533,205 @@ def render_page_content(search_str):
         className="card h-100",
     )
 
+    ai_input_card = dbc.Card(
+        [
+            dbc.CardHeader(
+                html.Div(
+                    [
+                        html.Span("✨ AI Replay Analyzer", className="fw-bold"),
+                        html.Span(
+                            "1 Link = Single Game | 2-5 Links = Multi-Game Trend",
+                            className="stat-label float-end fw-normal",
+                            style={"textTransform": "none"}
+                        ),
+                    ],
+                    className="d-flex justify-content-between align-items-center"
+                )
+            ),
+            dbc.CardBody(
+                [
+                    dbc.InputGroup(
+                        [
+                            dbc.Textarea(
+                                id="replay-url-input",
+                                placeholder="Paste Showdown replay link(s) here...\nExample:\nhttps://replay.pokemonshowdown.com/gen9ou-2657015138",
+                                rows=2,
+                                style={
+                                    "backgroundColor": "#121621",
+                                    "color": "#f1f2f6",
+                                    "border": "1px solid #2b3346",
+                                    "fontSize": "0.85rem"
+                                }
+                            ),
+                            dcc.Loading(
+                                id="loading-btn-ai-analysis",
+                                type="circle",
+                                color="#6c5ce7",
+                                children=dbc.Button(
+                                    "Analyze Replays",
+                                    id="btn-run-ai-analysis",
+                                    style={
+                                        "backgroundColor": "#6c5ce7",
+                                        "borderColor": "#6c5ce7",
+                                        "fontWeight": "600",
+                                        "height": "100%"
+                                    },
+                                    className="px-4"
+                                )
+                            ),
+                        ]
+                    ),
+                ],
+                style={"padding": "16px"}
+            )
+        ],
+        className="card mt-4",
+    )
+
     card_stats = dbc.Card(
-    [
-        dbc.CardHeader("Player Statistics"),
-        dbc.CardBody(
-            [
-                # Row 1: Elo
-                dbc.Row(
-                    [
-                        dbc.Col(
-                            [
-                                html.Div("Current Elo", className="stat-label"),
-                                html.Div(f"{current_elo}", className="stat-value primary-stat"),
-                            ],
-                            width=6,
-                        ),
-                        dbc.Col(
-                            [
-                                html.Div("Peak Elo", className="stat-label"),
-                                html.Div(f"{peak_elo}", className="stat-value"),
-                            ],
-                            width=6,
-                        ),
-                    ],
-                    className="mb-3",
-                ),
-                # Row 2: GXE
-                dbc.Row(
-                    [
-                        dbc.Col(
-                            [
-                                html.Div("Current GXE", className="stat-label"),
-                                html.Div(f"{current_gxe}%", className="stat-value primary-stat"),
-                            ],
-                            width=6,
-                        ),
-                        dbc.Col(
-                            [
-                                html.Div("Peak GXE", className="stat-label"),
-                                html.Div(f"{peak_gxe}%", className="stat-value"),
-                            ],
-                            width=6,
-                        ),
-                    ],
-                ),
-                html.Hr(style={"borderColor": "rgba(255, 255, 255, 0.08)", "margin": "16px 0"}),
-                # Row 3: Recent / Total Games
-                dbc.Row(
-                    [
-                        dbc.Col(
-                            [
-                                html.Div("Recent Games", className="stat-label"),
-                                html.Div(
-                                    [
-                                        html.Span(f"{wins}W ", className="badge-win"),
-                                        html.Span(f"{losses}L", className="badge-loss"),
-                                    ]
-                                ),
-                            ],
-                            width=6,
-                        ),
-                        dbc.Col(
-                            [
-                                html.Div("Total Games", className="stat-label"),
-                                html.Div(f"{total_games}", className="stat-value"),
-                            ],
-                            width=6,
-                        ),
-                    ],
-                    className="mb-3",
-                ),
-                # Row 4: MVP & Today's Elo
-                dbc.Row(
-                    [
-                        dbc.Col(
-                            [
-                                html.Div("MVP (Last 10)", className="stat-label"),
-                                dcc.Loading(
-                                    id="loading-mvp",
-                                    type="circle",
-                                    color="#6c5ce7",
-                                    children=html.Div(
-                                        id="mvp-mon-output",
-                                        className="format-tag",
-                                        style={"fontWeight": "600", "color": "#f1f2f6", "display": "inline-block"},
+        [
+            dbc.CardHeader("Player Statistics"),
+            dbc.CardBody(
+                [
+                    # row 1: elo
+                    dbc.Row(
+                        [
+                            dbc.Col(
+                                [
+                                    html.Div("Current Elo", className="stat-label"),
+                                    html.Div(f"{current_elo}", className="stat-value primary-stat"),
+                                ],
+                                width=6,
+                            ),
+                            dbc.Col(
+                                [
+                                    html.Div("Peak Elo", className="stat-label"),
+                                    html.Div(f"{peak_elo}", className="stat-value"),
+                                ],
+                                width=6,
+                            ),
+                        ],
+                        className="mb-3",
+                    ),
+                    # row 2: gxe
+                    dbc.Row(
+                        [
+                            dbc.Col(
+                                [
+                                    html.Div("Current GXE", className="stat-label"),
+                                    html.Div(f"{current_gxe}%", className="stat-value primary-stat"),
+                                ],
+                                width=6,
+                            ),
+                            dbc.Col(
+                                [
+                                    html.Div("Peak GXE", className="stat-label"),
+                                    html.Div(f"{peak_gxe}%", className="stat-value"),
+                                ],
+                                width=6,
+                            ),
+                        ],
+                    ),
+                    html.Hr(style={"borderColor": "rgba(255, 255, 255, 0.08)", "margin": "16px 0"}),
+                    # row 3: recent / total games
+                    dbc.Row(
+                        [
+                            dbc.Col(
+                                [
+                                    html.Div("Recent Games", className="stat-label"),
+                                    html.Div(
+                                        [
+                                            html.Span(f"{wins}W ", className="badge-win"),
+                                            html.Span(f"{losses}L", className="badge-loss"),
+                                        ]
                                     ),
-                                ),
-                            ],
-                            width=6,
-                        ),
-                        dbc.Col(
-                            [
-                                html.Div("Elo Gain/Loss Today", className="stat-label"),
-                                html.Div(
-                                    html.Span(
-                                        f"{today_diff_str}",
-                                        className=(
-                                            "badge-win"
-                                            if today_diff_str.startswith("+")
-                                            else ("badge-loss" if today_diff_str.startswith("-") else "stat-value")
+                                ],
+                                width=6,
+                            ),
+                            dbc.Col(
+                                [
+                                    html.Div("Total Games", className="stat-label"),
+                                    html.Div(f"{total_games}", className="stat-value"),
+                                ],
+                                width=6,
+                            ),
+                        ],
+                        className="mb-3",
+                    ),
+                    # row 4: mvp & today's elo
+                    dbc.Row(
+                        [
+                            dbc.Col(
+                                [
+                                    html.Div("MVP (Last 10)", className="stat-label"),
+                                    dcc.Loading(
+                                        id="loading-mvp",
+                                        type="circle",
+                                        color="#6c5ce7",
+                                        children=html.Div(
+                                            id="mvp-mon-output",
+                                            className="format-tag",
+                                            style={"fontWeight": "600", "color": "#f1f2f6", "display": "inline-block"},
                                         ),
-                                    )
-                                ),
-                            ],
-                            width=6,
-                        ),
-                    ],
-                ),
-                html.Hr(style={"borderColor": "rgba(255, 255, 255, 0.08)", "margin": "16px 0"}),
-                # Row 5: Streaks
-                dbc.Row(
-                    [
-                        dbc.Col(
-                            [
-                                html.Div("Longest Win Streak", className="stat-label"),
-                                html.Div(
-                                    html.Span(f"{longest_streak}W", className="badge-win"),
-                                ),
-                            ],
-                            width=6,
-                        ),
-                        dbc.Col(
-                            [
-                                html.Div("Current Streak", className="stat-label"),
-                                html.Div(
-                                    html.Span(
-                                        f"{current_streak}",
-                                        className=(
-                                            "badge-win"
-                                            if "W" in current_streak
-                                            else ("badge-loss" if "L" in current_streak else "stat-value")
-                                        ),
-                                    )
-                                ),
-                            ],
-                            width=6,
-                        ),
-                    ]
-                ),
-            ],
-            style={"padding": "20px"},
-        ),
-    ],
-    className="card h-100",
-)
+                                    ),
+                                ],
+                                width=6,
+                            ),
+                            dbc.Col(
+                                [
+                                    html.Div("Elo Gain/Loss Today", className="stat-label"),
+                                    html.Div(
+                                        html.Span(
+                                            f"{today_diff_str}",
+                                            className=(
+                                                "badge-win"
+                                                if today_diff_str.startswith("+")
+                                                else ("badge-loss" if today_diff_str.startswith("-") else "stat-value")
+                                            ),
+                                        )
+                                    ),
+                                ],
+                                width=6,
+                            ),
+                        ],
+                    ),
+                    html.Hr(style={"borderColor": "rgba(255, 255, 255, 0.08)", "margin": "16px 0"}),
+                    # Row 5: Streaks
+                    dbc.Row(
+                        [
+                            dbc.Col(
+                                [
+                                    html.Div("Longest Win Streak", className="stat-label"),
+                                    html.Div(
+                                        html.Span(f"{longest_streak}W", className="badge-win"),
+                                    ),
+                                ],
+                                width=6,
+                            ),
+                            dbc.Col(
+                                [
+                                    html.Div("Current Streak", className="stat-label"),
+                                    html.Div(
+                                        html.Span(
+                                            f"{current_streak}",
+                                            className=(
+                                                "badge-win"
+                                                if "W" in current_streak
+                                                else ("badge-loss" if "L" in current_streak else "stat-value")
+                                            ),
+                                        )
+                                    ),
+                                ],
+                                width=6,
+                            ),
+                        ]
+                    ),
+                ],
+                style={"padding": "20px"},
+            ),
+        ],
+        className="card h-100",
+    )
 
     card_elo = dbc.Card(
         [
@@ -510,12 +767,66 @@ def render_page_content(search_str):
         className="card h-100",
     )
 
+    ai_modal = dbc.Modal(
+        [
+            dbc.ModalHeader(
+                dbc.ModalTitle("AI Analysis", id="modal-title", style={"color": "#f1f2f6", "fontWeight": "600"}),
+                close_button=True,
+                style={
+                    "backgroundColor": "#181e2b",
+                    "borderBottom": "1px solid #2b3346",
+                    "color": "#f1f2f6"
+                }
+            ),
+            dbc.ModalBody(
+                dcc.Loading(
+                    id="loading-ai-modal",
+                    type="circle",
+                    color="#6c5ce7",
+                    children=html.Div(id="modal-body-content"),
+                ),
+                style={
+                    "backgroundColor": "#121621",
+                    "color": "#f1f2f6",
+                    "padding": "20px"
+                }
+            ),
+            dbc.ModalFooter(
+                dbc.Button(
+                    "Close",
+                    id="btn-close-modal",
+                    style={
+                        "backgroundColor": "#2b3346",
+                        "borderColor": "#2b3346",
+                        "color": "#f1f2f6",
+                        "fontWeight": "600"
+                    },
+                    className="ms-auto"
+                ),
+                style={
+                    "backgroundColor": "#181e2b",
+                    "borderTop": "1px solid #2b3346"
+                }
+            ),
+        ],
+        id="ai-modal",
+        is_open=False,
+        size="lg",
+        centered=True,
+        content_style={
+            "backgroundColor": "#121621",
+            "border": "1px solid #2b3346",
+            "borderRadius": "10px",
+            "overflow": "hidden"
+        }
+    )
+
     return dbc.Container(
         [
             dcc.Store(id="store-username", data=current_username),
             dcc.Store(id="store-format", data=selected_format),
-            
-            # Top Full-Width Elo Chart
+
+            # top full-width elo chart
             dbc.Row(
                 [
                     dbc.Col(card_elo, width=12),
@@ -523,7 +834,7 @@ def render_page_content(search_str):
                 className="mb-4",
             ),
             
-            # Bottom 3 Cards Side-by-Side Grid
+            # middle 3 cards side-by-side grid
             dbc.Row(
                 [
                     dbc.Col(card_stats, xs=12, md=4, className="mb-3"),
@@ -532,12 +843,21 @@ def render_page_content(search_str):
                 ],
                 className="g-3 d-flex flex-wrap",
             ),
+
+            # bottom ai card
+            dbc.Row(
+                [
+                    dbc.Col(ai_input_card, width=12)
+                ]
+            ),
+
+            ai_modal,
         ],
         fluid=True,
         style={"maxWidth": "1280px", "margin": "0 auto", "padding": "20px"},
     )
 
-# for mvp mon...
+# for mvp mon
 @dash_app.callback(
     Output("mvp-mon-output", "children"),
     [
@@ -726,9 +1046,9 @@ def load_replays_async(current_username, selected_format):
                         style={
                             "borderTop": "1px solid rgba(255,255,255,0.05)",
                             "paddingTop": "6px",
-                            "fontSize": "0.8rem"
-                        }
-                    )
+                            "fontSize": "0.8rem",
+                        },
+                    ),
                 ],
                 style={
                     "backgroundColor": "#121621",
@@ -759,7 +1079,6 @@ def load_replays_async(current_username, selected_format):
             },
         )
 
-# Page
 @app.route("/", methods=["GET", "POST"])
 @limiter.limit("5 per minute")
 def index():
@@ -834,11 +1153,9 @@ def index():
         )
         formats = [f[0] for f in formats]
 
-        # automatically take first format if nothing selected and there exists a format
         if not selected_format and formats:
             selected_format = formats[0]
 
-        # no format selected defaults to None format
         if not selected_format:
             selected_format = "None"
 
@@ -862,8 +1179,8 @@ def index():
             error_message=None,
             header_sprite_id=random_pokemon_id,
         )
-    
-# for export data to csv button
+
+
 @app.route("/export/<username>", methods=["GET"])
 @limiter.limit("10 per minute")
 def export_user_csv(username):
@@ -887,12 +1204,10 @@ def export_user_csv(username):
     if df.empty:
         return "No data found for this user.", 404
 
-    # timestamp formatting spreadsheet readability
     df["timestamp"] = pd.to_datetime(df["timestamp"]).dt.strftime(
         "%Y-%m-%d %H:%M:%S"
     )
 
-    # output directly to memory buffer (no temp file saved on server)
     output = StringIO()
     df.to_csv(output, index=False)
 

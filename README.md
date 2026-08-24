@@ -1,6 +1,8 @@
 # [showdownstats.com](https://showdownstats.com/)
 ![showdownstats](https://github.com/addumm/Pok-mon-Showdown-Elo-Data-Visualizer/blob/main/Screenshot%202026-08-13%20at%204.12.51%E2%80%AFAM.png)
 
+![showdownstats](https://github.com/addumm/Pok-mon-Showdown-Elo-Data-Visualizer/blob/main/Screenshot%202026-08-24%20at%2012.36.48%E2%80%AFAM.png)
+
 
 ## Motivation
 Seeing that there are not many progress progress tracking tools for pokemon (specifically pokemon showdown) compared to many other online games, I decided to build one myself. 

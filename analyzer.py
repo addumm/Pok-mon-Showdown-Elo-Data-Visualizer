@@ -7,6 +7,12 @@ from pydantic import BaseModel, Field
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 MODEL_ID = "gemini-3.5-flash"
 
+def get_genai_client():
+  api_key = os.getenv("GEMINI_API_KEY")
+  if not api_key:
+    raise ValueError("GEMINI_API_KEY environment variable is missing.")
+  return genai.Client(api_key=api_key)
+
 class SingleGameAnalysis(BaseModel):
     matchup: str = Field(
         description = "What are the team archetypes? Which of the users pokemon appear to be good in the matchup? what are the opponents threats to the user's team?"
